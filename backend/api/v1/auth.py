@@ -8,7 +8,7 @@ from config import settings
 from core import security
 from core.dependencies import CurrentUser, CurrentUserDep
 from core.response import ok
-from schemas.auth import ChangePasswordIn, LoginIn, RefreshIn, UpdateProfileIn, UserInfo
+from schemas.auth import ChangePasswordIn, LoginIn, RefreshIn, RegisterIn, UpdateProfileIn, UserInfo
 from schemas.auth import MenuNode
 from services import auth_service
 from repositories import rbac
@@ -126,6 +126,11 @@ async def login(body: LoginIn, request: Request, response: Response):
 async def refresh(body: RefreshIn):
     tokens = await auth_service.refresh_login(body.refresh_token)
     return ok(tokens, message="刷新成功")
+
+
+@router.post("/register", summary="开放注册（注册即登录）")
+async def register(body: RegisterIn):
+    return ok(await auth_service.register(body), message="注册成功")
 
 
 @router.post("/logout", summary="登出")

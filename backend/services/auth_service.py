@@ -55,6 +55,44 @@ async def login(username: str, password: str) -> dict:
     return tokens
 
 
+async def register(data) -> dict:
+    """开放注册：查重→密码策略→建号→绑 user 角色→记初始密码→签发令牌（注册即登录）。"""
+    from sqlalchemy.exc import IntegrityError
+
+    from services import password_policy
+
+    username = data.username
+
+    if await users.get_by_username(username):
+        raise BizError(message="用户名已存在")
+
+    password_policy.validate_password_strength(data.password)
+
+    try:
+        user = await users.create({
+            "username": username,
+            "password_hash": security.hash_password(data.password),
+            "display_name": data.display_name or username,
+            "email": data.email or "",
+            "is_active": True,
+            "is_superuser": False,
+            "password_changed_at": datetime.now(timezone.utc),
+        })
+    except IntegrityError:
+        # 并发同名注册兜底：唯一约束冲突同样按已存在处理
+        raise BizError(message="用户名已存在")
+
+    role = await roles.get_by_code("user")
+    if role:
+        await users.set_roles(user["id"], [role["id"]])
+
+    await password_policy.note_initial_password(user["id"], user["password_hash"])
+
+    tokens = await issue_tokens(user)
+    tokens["user"] = _clean_user_payload(user)
+    return tokens
+
+
 async def refresh_login(refresh_token: str) -> dict:
     if settings.auth_mode == "session":
         # session 模式无 refresh 语义，重新登录

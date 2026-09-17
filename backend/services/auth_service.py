@@ -57,6 +57,7 @@ async def login(username: str, password: str) -> dict:
 
 async def register(data) -> dict:
     """开放注册：查重→密码策略→建号→绑 user 角色→记初始密码→签发令牌（注册即登录）。"""
+    from pymongo.errors import DuplicateKeyError
     from sqlalchemy.exc import IntegrityError
 
     from services import password_policy
@@ -78,7 +79,7 @@ async def register(data) -> dict:
             "is_superuser": False,
             "password_changed_at": datetime.now(timezone.utc),
         })
-    except IntegrityError:
+    except (IntegrityError, DuplicateKeyError):
         # 并发同名注册兜底：唯一约束冲突同样按已存在处理
         raise BizError(message="用户名已存在")
 

@@ -86,7 +86,9 @@ async def register(data) -> dict:
     if role:
         await users.set_roles(user["id"], [role["id"]])
 
-    await password_policy.note_initial_password(user["id"], user["password_hash"])
+    await password_policy.note_initial_password(
+        user["id"], user["password_hash"]
+    )
 
     tokens = await issue_tokens(user)
     tokens["user"] = _clean_user_payload(user)

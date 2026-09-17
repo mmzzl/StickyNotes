@@ -11,6 +11,7 @@ INIT_ROLES = [
     {"name": "系统管理员", "code": "superadmin", "description": "拥有全部权限，负责系统配置与用户管理"},
     {"name": "普通管理员", "code": "admin", "description": "负责业务功能日常运维"},
     {"name": "只读用户", "code": "readonly", "description": "只能查看，不能修改"},
+    {"name": "普通用户", "code": "user", "description": "注册用户，仅管理自己的便签"},
 ]
 
 # 权限：按模块分组
@@ -36,6 +37,11 @@ INIT_PERMISSIONS = [
     {"code": "device:create", "name": "新增设备", "module": "device"},
     {"code": "device:update", "name": "修改设备", "module": "device"},
     {"code": "device:delete", "name": "删除设备", "module": "device"},
+    # 便签模块
+    {"code": "note:list", "name": "便签列表", "module": "note"},
+    {"code": "note:create", "name": "新建便签", "module": "note"},
+    {"code": "note:update", "name": "修改便签", "module": "note"},
+    {"code": "note:delete", "name": "删除便签", "module": "note"},
 ]
 
 # 菜单树：id 固定，便于权限关联与树形构建
@@ -61,8 +67,10 @@ ROLE_PERMISSION_CODES = {
         "sys:user:list", "sys:role:list", "sys:menu:list",
         "sys:notify:list", "sys:notify:update",
         "device:list", "device:create", "device:update", "device:delete",
+        "note:list", "note:create", "note:update", "note:delete",
     ],
     "readonly": ["device:list"],
+    "user": ["note:list", "note:create", "note:update", "note:delete"],
 }
 
 INIT_DEVICES = [

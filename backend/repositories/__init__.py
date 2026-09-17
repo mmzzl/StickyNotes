@@ -15,6 +15,7 @@ from repositories.captcha import CaptchaRepo
 from repositories.login_lock import LoginLockRepo
 from repositories.password_history import PasswordHistoryRepo
 from repositories.rbac import RbacRepo
+from repositories.note import NoteRepo
 
 # 单例（各自持有无状态方法，可安全复用）
 users = UserRepo()
@@ -27,10 +28,11 @@ captchas = CaptchaRepo()
 login_locks = LoginLockRepo()
 password_history = PasswordHistoryRepo()
 rbac = RbacRepo()
+notes = NoteRepo()
 
 __all__ = [
     "UserRepo", "RoleRepo", "PermissionRepo", "MenuRepo", "DeviceRepo", "SessionRepo",
-    "CaptchaRepo", "LoginLockRepo", "PasswordHistoryRepo", "RbacRepo",
+    "CaptchaRepo", "LoginLockRepo", "PasswordHistoryRepo", "RbacRepo", "NoteRepo",
     "users", "roles", "permissions", "menus", "devices", "sessions", "captchas",
-    "login_locks", "password_history", "rbac",
+    "login_locks", "password_history", "rbac", "notes",
 ]

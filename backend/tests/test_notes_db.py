@@ -37,3 +37,27 @@ def test_note_create_color_pattern():
 
     with _pytest.raises(ValidationError):
         NoteCreate(color="red")
+
+
+async def test_note_repo_wired():
+    from repositories import notes
+
+    assert notes.table == "notes"
+    fields = set(notes.schema.model_fields.keys())
+    assert {"owner_id", "title", "content", "color", "pos_x", "pos_y"} <= fields
+
+
+async def test_note_repo_crud():
+    from repositories import notes
+
+    created = await notes.create({"owner_id": "u1", "title": "t", "pos_x": 10, "pos_y": 20})
+    assert created["id"]
+    assert created["pos_x"] == 10
+
+    one = await notes._find_one({"owner_id": "u1"})
+    assert one and one["id"] == created["id"]
+
+    assert (await notes.get(created["id"]))["title"] == "t"
+
+    await notes.delete(created["id"])
+    assert await notes.get(created["id"]) is None

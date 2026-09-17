@@ -39,7 +39,7 @@ async def test_notes_require_auth(client):
 
 
 async def test_notes_crud(client):
-    token = await _make_user(client, "alice")
+    token = await _make_user(client, "alice_api")
     h = await _auth(client, token)
 
     r1 = await client.post("/api/v1/notes", headers=h, json={"title": "a", "content": "x"})
@@ -67,7 +67,7 @@ async def test_notes_crud(client):
 
 async def test_notes_owner_isolated(client):
     tok_a = await _make_user(client, "alice_iso")
-    tok_b = await _make_user(client, "bob")
+    tok_b = await _make_user(client, "bob_api")
     ha, hb = await _auth(client, tok_a), await _auth(client, tok_b)
 
     nid = (await client.post("/api/v1/notes", headers=ha, json={"title": "secret"})
@@ -81,7 +81,7 @@ async def test_notes_owner_isolated(client):
 
 
 async def test_notes_coords_roundtrip(client):
-    token = await _make_user(client, "carol")
+    token = await _make_user(client, "carol_api")
     h = await _auth(client, token)
     r = await client.post("/api/v1/notes", headers=h, json={"pos_x": -50, "pos_y": 1200})
     assert r.status_code == 200

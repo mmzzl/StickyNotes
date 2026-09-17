@@ -182,7 +182,7 @@ sequenceDiagram
     Client->>API: 1. GET/POST /notes 或 {PUT/DELETE}/notes/{id}
     API->>SVC: 2. 携带 current_user.id 调用 service
     alt 列表/新建
-        SVC->>REPO: 3. list(filters={owner_id}) / create({...,owner_id})
+        SVC->>REPO: 3. list_for_owner(owner_id) / create({...,owner_id})
         REPO-->>SVC: 结果
         SVC-->>API: 4. 返回
         API-->>Client: 200

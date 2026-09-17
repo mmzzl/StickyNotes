@@ -10,10 +10,11 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from pwdlib import PasswordHash
+from pwdlib.hashers.bcrypt import BcryptHasher
 
 from config import settings
 
-password_hash = PasswordHash.recommended()
+password_hash = PasswordHash([BcryptHasher()])
 
 
 def hash_password(plain: str) -> str:

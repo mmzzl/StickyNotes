@@ -56,7 +56,7 @@ async def login(username: str, password: str) -> dict:
 
 
 async def register(data) -> dict:
-    """开放注册：查重→密码策略→建号→绑 user 角色→记初始密码→签发令牌（注册即登录）。"""
+    """开放注册：查重→密码策略→建号→绑「普通管理员」角色→记初始密码→签发令牌（注册即登录）。"""
     from pymongo.errors import DuplicateKeyError
     from sqlalchemy.exc import IntegrityError
 
@@ -83,7 +83,9 @@ async def register(data) -> dict:
         # 并发同名注册兜底：唯一约束冲突同样按已存在处理
         raise BizError(message="用户名已存在")
 
-    role = await roles.get_by_code("user")
+    # 注册即分配「普通管理员」：登录后浏览器后台可见菜单（用户/角色/便签），
+    # 便签按本人隔离（后端 owner 过滤）。如需收紧可在注册前改为其它角色 code。
+    role = await roles.get_by_code("admin")
     if role:
         await users.set_roles(user["id"], [role["id"]])
 

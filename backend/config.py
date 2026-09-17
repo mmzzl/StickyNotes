@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     auth_mode: str = "jwt"
 
     # JWT 认证
-    jwt_secret: str = "change-me-jwt-secret-at-least-32-chars"
+    jwt_secret: str = "c4734453d8af8dd19f8c798576b3c28baf9ccf69c9ff075556c8eef3fe5498c4"
     jwt_algorithm: str = "HS256"
     jwt_access_expire_minutes: int = 30
     jwt_refresh_expire_days: int = 7

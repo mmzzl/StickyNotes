@@ -1,9 +1,9 @@
-"""自助注册接口测试：注册即登录 + user 角色 note:list 可用 + 重名/弱密码拒绝。"""
+"""自助注册接口测试：注册即登录 + 普通管理员角色（note:list + 后台菜单可用）+ 重名/弱密码拒绝。"""
 from tests.helpers import login_with_captcha
 
 
 async def test_register_ok_and_autologin(client):
-    """注册成功即登录：返回令牌；已具备 user 角色（note:list 可用）；真实可登录。"""
+    """注册成功即登录：返回令牌；已分配「普通管理员」角色（note:list + sys:user:list 可用）；真实可登录。"""
     from repositories import roles
 
     r = await client.post("/api/v1/auth/register", json={
@@ -13,13 +13,15 @@ async def test_register_ok_and_autologin(client):
     data = r.json()["data"]
     assert data.get("access_token") and data.get("refresh_token")
 
-    # 注册即登录后，user 角色已具备 note:list 权限（note:list 可用）。
+    # 注册即分配「普通管理员」角色：具备便签权限，且浏览器后台可见系统菜单。
     # 便签 HTTP API 与注册任务并行开发（本任务上游仅 T4），此处以 /auth/me
-    # 的权限码断言同义语义，避免耦合未落地的 note API 路由。
+    # 的权限/角色码断言同义语义，避免耦合未落地的 note API 路由。
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     me = await client.get("/api/v1/auth/me", headers=headers)
     assert me.status_code == 200, me.text
     assert "note:list" in me.json()["data"]["permissions"]
+    assert "sys:user:list" in me.json()["data"]["permissions"]  # 普通管理员可见用户管理
+    assert "admin" in me.json()["data"]["roles"]
 
     assert await roles._find_one({"code": "user"})
 

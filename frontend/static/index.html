@@ -3,23 +3,95 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>安全管控平台</title>
-  <link rel="stylesheet" href="/css/app.css" />
+  <title>便签</title>
+  <link rel="stylesheet" href="/notes.css" />
 </head>
 <body>
-  <div id="root"></div>
+  <!-- ===== 登录 / 注册 ===== -->
+  <div id="auth-view" class="auth-wrap hidden">
+    <div class="auth-card">
+      <div class="auth-logo">📝</div>
+      <h1 class="auth-title">我的便签</h1>
+      <p class="auth-sub">登录后把想法贴在屏幕上</p>
+      <div class="tabs" id="auth-tabs">
+        <button class="tab active" data-tab="login">登录</button>
+        <button class="tab" data-tab="register">注册</button>
+      </div>
 
-  <script src="/js/api.js"></script>
-  <script src="/js/ui.js"></script>
-  <script src="/js/table.js"></script>
-  <script src="/js/pages/dashboard.js"></script>
-  <script src="/js/pages/users.js"></script>
-  <script src="/js/pages/roles.js"></script>
-  <script src="/js/pages/menus.js"></script>
-  <script src="/js/pages/devices.js"></script>
-  <script src="/js/pages/change_password.js"></script>
-  <script src="/js/pages/notify_channels.js"></script>
-  <script src="/js/pages/notify_policy.js"></script>
-  <script src="/js/app.js"></script>
+      <!-- 登录 -->
+      <form id="login-form" class="auth-form">
+        <label>用户名</label>
+        <input name="username" autocomplete="username" placeholder="请输入用户名" required />
+        <label>密码</label>
+        <input name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required />
+        <div class="captcha-row">
+          <div>
+            <label>验证码</label>
+            <input name="captcha_code" maxlength="6" placeholder="输入右侧验证码" required style="width:100%" />
+          </div>
+          <div class="captcha-box">
+            <img id="captcha-img" alt="验证码" title="点击刷新" />
+            <button type="button" id="captcha-refresh" class="btn-ghost">换一张</button>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary btn-block">登 录</button>
+      </form>
+
+      <!-- 注册 -->
+      <form id="register-form" class="auth-form hidden">
+        <label>用户名</label>
+        <input name="username" placeholder="登录用，2~64 位" required />
+        <label>密码</label>
+        <input name="password" type="password" placeholder="≥8 位，含大小写字母与数字" required />
+        <label>显示名（可选）</label>
+        <input name="display_name" placeholder="别人看到的昵称" />
+        <button type="submit" class="btn-primary btn-block">注册并登录</button>
+      </form>
+
+      <div id="form-error" class="form-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- ===== 便签桌 ===== -->
+  <div id="desk-view" class="hidden">
+    <header class="topbar">
+      <div class="brand">📝 <span>我的便签</span></div>
+      <div class="top-actions">
+        <button type="button" id="btn-admin" class="btn-ghost hidden">管理后台</button>
+        <span class="user-chip" id="user-chip"></span>
+        <button type="button" id="btn-logout" class="btn-ghost">退出登录</button>
+      </div>
+    </header>
+
+    <main id="board" class="board">
+      <div id="empty-hint" class="empty-hint hidden">
+        <div class="empty-note">双击或点击右下角「＋ 新建便签」，贴一张到屏幕上</div>
+      </div>
+    </main>
+
+    <button id="btn-new" class="fab" title="新建便签">＋</button>
+  </div>
+
+  <!-- 便签卡片模板 -->
+  <template id="note-tpl">
+    <article class="note">
+      <div class="note-bar">
+        <span class="note-drag">⠿</span>
+        <div class="note-colors">
+          <button class="dot" data-c="#fff9c4"></button>
+          <button class="dot" data-c="#ffd8d8"></button>
+          <button class="dot" data-c="#d7f0ff"></button>
+          <button class="dot" data-c="#d8f5d8"></button>
+          <button class="dot" data-c="#f5e0ff"></button>
+          <button class="dot" data-c="#fff0d0"></button>
+        </div>
+        <button class="note-del" title="关闭便签">✕</button>
+      </div>
+      <input class="note-title" placeholder="标题" maxlength="256" />
+      <textarea class="note-content" placeholder="写点什么…" rows="5"></textarea>
+    </article>
+  </template>
+
+  <script src="/notes.js"></script>
 </body>
 </html>

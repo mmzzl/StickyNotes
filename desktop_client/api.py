@@ -16,13 +16,27 @@ class ApiError(Exception):
 
 
 class Client:
-    def __init__(self, base_url: str | None = None):
+    def __init__(self, base_url=None):
         cfg = load_config()
         self.base_url = (base_url or cfg.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
         self.session = requests.Session()          # 携带 anon_sid cookie 走验证码登录
         self.access_token = cfg.get("access_token", "")
         self.refresh_token = cfg.get("refresh_token", "")
         self.username = cfg.get("username", "")
+
+    def set_base_url(self, url):
+        """切换服务器地址：换新会话（验证码 cookie 独立）并持久化。"""
+        url = (url or DEFAULT_BASE_URL).strip().rstrip("/")
+        if not url.startswith(("http://", "https://")):
+            url = "http://" + url
+        self.base_url = url
+        self.session = requests.Session()
+        self.access_token = ""
+        self.refresh_token = ""
+        self.username = ""
+        cfg = load_config()
+        cfg.update(base_url=url, access_token="", refresh_token="", username="")
+        save_config(cfg)
 
     # ---- 基础请求 ----
     def _headers(self):
@@ -43,7 +57,7 @@ class Client:
 
     def _request(self, method, path, json=None):
         resp = self.session.request(method, self._url(path),
-                                    json=json or {}, headers=self._headers())
+                                    json=json or {}, headers=self._headers(), timeout=10, verify=False)
         if resp.status_code >= 400:
             self._raise(resp)
         return resp.json().get("data")

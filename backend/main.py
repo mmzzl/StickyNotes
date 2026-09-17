@@ -16,7 +16,7 @@ from core.exceptions import register_exception_handlers
 FRONTEND_DIR = BACKEND_DIR.parent / "frontend" / "static"
 
 
-_DEFAULT_JWT_SECRET = "change-me-jwt-secret-at-least-32-chars"
+_DEFAULT_JWT_SECRET = "6dace548df771b4a47e6d1fcc1a1d849a21624026ca2c00df0e8201e935ee30c"
 
 
 @asynccontextmanager
@@ -78,7 +78,11 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_prefix)
 
-    # 托管无构建前端（若 frontend/static 存在）
+    # 管理后台：模板 SPA 迁至 frontend/static/admin/，经 /admin 访问
+    admin_dir = FRONTEND_DIR / "admin"
+    if admin_dir.is_dir():
+        app.mount("/admin", StaticFiles(directory=str(admin_dir), html=True), name="admin")
+    # 根路径托管便签 Web 应用（frontend/static/index.html）；须在 /admin 之后挂载，避免遮蔽
     if FRONTEND_DIR.is_dir():
         app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 

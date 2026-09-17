@@ -367,6 +367,7 @@ desktop_client/
 | §3.2.2.1 | 新增 POST /auth/register 自助注册（RegisterIn + auth_service.register + /auth/register） | 开放注册需求 | auth 路由增端点，豁免密码到期网关；并发同名由 SQL IntegrityError + Mongo DuplicateKeyError 均转 400 | 用户（2026-09-17 已实施） |
 | §3.2.3 | 新增 notes 表（SQL `ix_notes_owner_id` / Mongo `owner_id` 索引）、seed 新增 user 角色与 note:* 权限（admin 追加） | 多用户便签 | 纯增量，seed 幂等；角色/权限关系一致 | 用户（2026-09-17 已实施） |
 | §3.2.5 | 新增 desktop_client/（PyQt5 贴纸式便签客户端：登录/注册含验证码、托盘、便签窗口、位置/颜色持久化） | PyQt 前端需求 | 独立目录不参与后端托管；浏览器管理后台保留 | 用户（2026-09-17 已实施；GUI 手工验收待有显示环境执行） |
+| 第二轮改善 | ① new 注册改绑「普通管理员」(admin) 角色 → 登录后浏览器后台可见菜单；② 网页交付面：根路径=便签 Web 应用（登录/注册→便签卡片 CRUD，vanilla JS 复用 /api/v1/*，JWT 存 localStorage，owner 隔离），模板 SPA 迁至 /admin（main.py 先挂 /admin 再挂根）；③ 客户端：登录后显示「便签桌」主窗口（含醒目「＋新建便签」）+ QSS 全局主题 + 便签窗圆角投影/顶部条原生拖动(startSystemMove) + 登录框加服务器地址输入 + 绘制托盘图标（不再依赖 fromTheme） | 部署反馈：网页版无便签功能、登录后空白、UI 难看 | 后端 main.py 挂载顺序调整；注册角色语义变更（原 user 角色仍保留在 seed 供手动分配）；客户端启动不再自动铺满便签，改由便签桌列表/「新建」/「恢复全部」触发 | 用户（2026-09-17 已实施） |
 | 附录自检 | 「§6 变更控制」勾选项已完成 | 收尾 | 无 | 用户（2026-09-17） |
 
 ---

@@ -5,7 +5,7 @@ from pathlib import Path
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "sticky_notes"
 CONFIG_FILE = CONFIG_DIR / "config.json"
-DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+DEFAULT_BASE_URL = "http://10.74.64.100:18000"
 
 _EMPTY = {"base_url": DEFAULT_BASE_URL, "access_token": "",
           "refresh_token": "", "username": ""}

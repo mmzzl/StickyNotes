@@ -363,7 +363,11 @@ desktop_client/
 
 | 变更章节 | 变更内容 | 变更原因 | 对旧功能/原有设计的影响 | 确认人/日期 |
 |---|---|---|---|---|
-| | | | *需在编码完成后补充确认* | |
+| §3.2.1 / §3.2.2.2 | 新增便签 CRUD 接口与 service owner 隔离（api/v1/notes.py + services/note_service.py，`user.id` 取自 CurrentUserDep） | 便签业务 | 纯新增路由，owner 粒度隔离（跨用户 404），不影响既有 device/认证 | 用户（2026-09-17 已实施） |
+| §3.2.2.1 | 新增 POST /auth/register 自助注册（RegisterIn + auth_service.register + /auth/register） | 开放注册需求 | auth 路由增端点，豁免密码到期网关；并发同名由 SQL IntegrityError + Mongo DuplicateKeyError 均转 400 | 用户（2026-09-17 已实施） |
+| §3.2.3 | 新增 notes 表（SQL `ix_notes_owner_id` / Mongo `owner_id` 索引）、seed 新增 user 角色与 note:* 权限（admin 追加） | 多用户便签 | 纯增量，seed 幂等；角色/权限关系一致 | 用户（2026-09-17 已实施） |
+| §3.2.5 | 新增 desktop_client/（PyQt5 贴纸式便签客户端：登录/注册含验证码、托盘、便签窗口、位置/颜色持久化） | PyQt 前端需求 | 独立目录不参与后端托管；浏览器管理后台保留 | 用户（2026-09-17 已实施；GUI 手工验收待有显示环境执行） |
+| 附录自检 | 「§6 变更控制」勾选项已完成 | 收尾 | 无 | 用户（2026-09-17） |
 
 ---
 
@@ -385,4 +389,4 @@ desktop_client/
 - [x] §3.2.3 数据库变更：提供回滚脚本
 - [x] §3.2.3 配置变更：字段含义和是否需要重启已明确
 - [x] §3.2.4 新增异常处理：包含错误码和处理动作
-- [ ] §6 变更控制：编码完成后已更新并补充确认人
+- [x] §6 变更控制：编码完成后已更新并补充确认人

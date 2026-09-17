@@ -26,4 +26,5 @@ async def ensure_indexes() -> None:
     await get_collection("password_history").create_index("created_at")
     await get_collection("user_roles").create_index("user_id")
     await get_collection("role_permissions").create_index("role_id")
+    await get_collection("notes").create_index("owner_id")
     log.info("MongoDB 索引创建完成")

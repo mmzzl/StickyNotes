@@ -556,6 +556,8 @@ Expected: FAIL（404/ImportError：无 notes 路由与 service）
 - [ ] **Step 3: 新建** `backend/services/note_service.py`
 
   > **调用 `cospowers:code-compliance-check`** 完成后检查代码规范（命名/分层/异常）
+
+```python
 """便签业务：所有查询/写入都以当前用户 owner_id 为边界。"""
 
 from core.exceptions import NotFoundError

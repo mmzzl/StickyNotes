@@ -1,5 +1,8 @@
-"""便签 DB 模型 / Mongo 索引测试。"""
+"""便签 DB 模型 / Mongo 索引 / Pydantic schema 测试。"""
 from pathlib import Path
+
+import pytest as _pytest
+from pydantic import ValidationError
 
 
 def test_note_model_registered():
@@ -17,3 +20,20 @@ def test_mongo_index_includes_notes():
     src = (Path(__file__).resolve().parents[1] / "db" / "mongo" / "indexes.py").read_text()
     assert '"notes")' in src
     assert 'create_index("owner_id")' in src
+
+
+def test_note_create_defaults():
+    from schemas.note import NoteCreate
+
+    n = NoteCreate()
+    assert n.title == ""
+    assert n.content == ""
+    assert n.color == "#fff9c4"
+    assert n.pos_x == 0 and n.pos_y == 0
+
+
+def test_note_create_color_pattern():
+    from schemas.note import NoteCreate
+
+    with _pytest.raises(ValidationError):
+        NoteCreate(color="red")

@@ -202,10 +202,19 @@ class NoteWindow(QFrame):
 
     @staticmethod
     def _is_code_fmt(cf):
-        """判断字符格式是否代表代码：固定字宽 或 等宽字体族（兼容各 Qt 版本）。"""
+        """判断字符格式是否代表代码：固定字宽 或 等宽字体族（兼容各 Qt 版本）。
+        注意：QTextCharFormat 没有 fontFamilies()，需经 cf.font() 拿 QFont 再枚举。"""
         if cf.fontFixedPitch():
             return True
-        fam = " ".join(cf.fontFamilies()).lower()
+        font = cf.font()
+        try:
+            names = list(font.families() or [])   # Qt≥5.13
+        except Exception:  # noqa: BLE001
+            names = []
+        if not names:
+            family = font.family()
+            names = [family] if family else []
+        fam = " ".join(names).lower()
         return any(k in fam for k in ("mono", "courier", "consolas", "menlo", "monospace"))
 
     def _darken_code(self, browser):

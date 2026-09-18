@@ -49,6 +49,32 @@ class MarkdownPreviewTest(unittest.TestCase):
         finally:
             w.close()
 
+    def test_is_code_fmt_tolerates_missing_font_families(self):
+        """QTextCharFormat 无 fontFamilies()（返回 None）时不能抛 TypeError。
+        （PyQt5 的 cf.fontFamilies() 返回 None，join None 会炸。）"""
+        from note_window import NoteWindow
+
+        class _FakeFont:
+            def __init__(self, family):
+                self._family = family
+            def families(self):
+                return None          # 模拟 PyQt5 收到不存在的 API → None
+            def family(self):
+                return self._family
+
+        class _FakeCharFormat:
+            def __init__(self, family="SimSun"):
+                self._font = _FakeFont(family)
+            def fontFixedPitch(self):
+                return False
+            def font(self):
+                return self._font
+
+        # 非等宽字体族 → False 且不抛异常（回归：join None 曾抛 TypeError）
+        self.assertFalse(NoteWindow._is_code_fmt(_FakeCharFormat("SimSun")))
+        # 等宽字体族兜底仍能识别代码
+        self.assertTrue(NoteWindow._is_code_fmt(_FakeCharFormat("Consolas")))
+
 
 if __name__ == "__main__":
     unittest.main()

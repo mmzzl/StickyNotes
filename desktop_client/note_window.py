@@ -1,9 +1,9 @@
 """贴纸式便签窗口：无边框置顶、可拖动、可改色、关窗即存（内容/位置同步到后端）。"""
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QKeySequence
 from PyQt5.QtWidgets import (QColorDialog, QFrame, QGraphicsDropShadowEffect,
-                             QHBoxLayout, QLineEdit, QTextEdit, QToolButton,
-                             QVBoxLayout, QWidget)
+                             QHBoxLayout, QLabel, QLineEdit, QShortcut,
+                             QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 
 class _DragBar(QWidget):
@@ -79,12 +79,23 @@ class NoteWindow(QFrame):
         self.content.setPlaceholderText("写点什么…")
         self.content.textChanged.connect(self._save_later)
 
+        # Ctrl+S 立即保存提示（右下角小字）
+        self.save_status = QLabel("✓ 已保存")
+        self.save_status.setObjectName("SaveStatus")
+        self.save_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.save_status.hide()
+
         body = QVBoxLayout(card)
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
         body.addWidget(bar)
         body.addWidget(self.title)
         body.addWidget(self.content, 1)
+        body.addWidget(self.save_status)
+
+        # 平台标准保存快捷键（Windows/Linux Ctrl+S；macOS Cmd+S）
+        shortcut = QShortcut(QKeySequence(QKeySequence.Save), self)
+        shortcut.activated.connect(self._save_manual)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(14, 14, 14, 18)
@@ -116,6 +127,8 @@ class NoteWindow(QFrame):
             " font-size: 14px; font-weight: 700; padding: 4px 12px 2px; }"
             "#NoteContent { border: none; background: transparent;"
             " font-size: 13px; line-height: 1.55; padding: 2px 12px 10px; }"
+            "#SaveStatus { background: transparent; color: rgba(0,0,0,0.45);"
+            " font-size: 11px; padding: 0 12px 6px; }"
             % color)
 
     def _pick_color(self):
@@ -131,7 +144,23 @@ class NoteWindow(QFrame):
     def moveEvent(self, _e):
         self._save_later()  # 拖动停止后延迟上报位置
 
-    def _save(self):
+    def _save_manual(self):
+        """Ctrl+S：立即保存（跳过防抖）并给出已保存提示。"""
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+        self._save(show_ok=True)
+
+    def _flash_saved(self):
+        self.save_status.setText("✓ 已保存")
+        self.save_status.show()
+        if not hasattr(self, "_ok_timer"):
+            self._ok_timer = QTimer(self)
+            self._ok_timer.setSingleShot(True)
+            self._ok_timer.setInterval(1500)
+            self._ok_timer.timeout.connect(self.save_status.hide)
+        self._ok_timer.start()
+
+    def _save(self, show_ok=False):
         try:
             data = self.client.update_note(
                 self.note["id"],
@@ -141,6 +170,8 @@ class NoteWindow(QFrame):
                 self.note = data
             if self.on_changed:
                 self.on_changed(self.note["id"])
+            if show_ok:
+                self._flash_saved()
         except Exception:  # noqa: BLE001
             pass  # 离线等场景静默，待下次编辑再同步
 

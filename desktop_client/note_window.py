@@ -1,9 +1,10 @@
-"""贴纸式便签窗口：无边框置顶、可拖动、可改色、关窗即存（内容/位置同步到后端）。"""
+"""贴纸式便签窗口：无边框置顶、可拖动、可改色、关窗即存（内容/位置同步到后端）。
+✕ 关闭=收起（内容已自动保存，可在便签桌/恢复全部中找回）；删除需右键→删除此便签并二次确认。"""
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor, QKeySequence
+from PyQt5.QtGui import QColor, QCursor, QKeySequence
 from PyQt5.QtWidgets import (QColorDialog, QFrame, QGraphicsDropShadowEffect,
-                             QHBoxLayout, QLabel, QLineEdit, QShortcut,
-                             QTextEdit, QToolButton, QVBoxLayout, QWidget)
+                             QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
+                             QShortcut, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 
 
 class _DragBar(QWidget):
@@ -55,17 +56,25 @@ class NoteWindow(QFrame):
         self.color_btn.setObjectName("ColorBtn")
         self.color_btn.setCursor(Qt.PointingHandCursor)
         self.color_btn.clicked.connect(self._pick_color)
+        self.save_btn = QToolButton()
+        self.save_btn.setText("保存")
+        self.save_btn.setObjectName("SaveBtn")
+        self.save_btn.setCursor(Qt.PointingHandCursor)
+        self.save_btn.setToolTip("立即保存（Ctrl+S）")
+        self.save_btn.clicked.connect(self._save_manual)
         self.del_btn = QToolButton()
         self.del_btn.setText("✕")
         self.del_btn.setObjectName("DelBtn")
         self.del_btn.setCursor(Qt.PointingHandCursor)
-        self.del_btn.clicked.connect(self._delete)
+        self.del_btn.setToolTip("关闭便签（内容已自动保存，可从便签桌恢复）")
+        self.del_btn.clicked.connect(self._close_note)
 
         bbar = QHBoxLayout()
         bbar.setContentsMargins(4, 0, 6, 0)
         bbar.setSpacing(2)
         bbar.addWidget(grip)
         bbar.addStretch(1)
+        bbar.addWidget(self.save_btn)
         bbar.addWidget(self.color_btn)
         bbar.addWidget(self.del_btn)
         bar.setLayout(bbar)
@@ -97,6 +106,10 @@ class NoteWindow(QFrame):
         shortcut = QShortcut(QKeySequence(QKeySequence.Save), self)
         shortcut.activated.connect(self._save_manual)
 
+        # 右键菜单：保存 / 删除（删除带二次确认）
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_note_menu)
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(14, 14, 14, 18)
         outer.addWidget(card)
@@ -120,6 +133,10 @@ class NoteWindow(QFrame):
             "#ColorBtn { border: none; background: transparent;"
             " color: rgba(0,0,0,0.55); font-size: 16px; }"
             "#ColorBtn:hover { color: black; }"
+            "#SaveBtn { border: none; background: rgba(255,255,255,0.55);"
+            " border-radius: 5px; padding: 2px 8px; font-size: 12px;"
+            " color: rgba(0,0,0,0.6); }"
+            "#SaveBtn:hover { background: rgba(255,255,255,0.95); color: black; }"
             "#DelBtn { border: none; background: transparent;"
             " color: rgba(0,0,0,0.45); font-size: 15px; }"
             "#DelBtn:hover { color: #c0392b; }"
@@ -169,11 +186,30 @@ class NoteWindow(QFrame):
             if isinstance(data, dict):
                 self.note = data
             if self.on_changed:
-                self.on_changed(self.note["id"])
+                self.on_changed(self.note)
             if show_ok:
                 self._flash_saved()
         except Exception:  # noqa: BLE001
             pass  # 离线等场景静默，待下次编辑再同步
+
+    def _close_note(self):
+        """✕：关闭（收起）便签窗口。内容已自动保存，列表/恢复全部仍可找回。"""
+        self.close()
+
+    # ---- 右键菜单 ----
+    def _show_note_menu(self, _pos):
+        menu = QMenu(self)
+        act_save = menu.addAction("保存 (Ctrl+S)")
+        act_save.triggered.connect(self._save_manual)
+        act_del = menu.addAction("删除此便签…")
+        act_del.triggered.connect(self._confirm_delete)
+        menu.exec_(QCursor.pos())
+
+    def _confirm_delete(self):
+        if QMessageBox.question(
+                self, "删除便签", "确定删除这张便签？删除后不可恢复。",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+            self._delete()
 
     def _delete(self):
         try:

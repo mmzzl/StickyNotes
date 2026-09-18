@@ -121,13 +121,8 @@ class DeskWindow(QMainWindow):
             item.setToolTip((note.get("content") or "")[:200] or "（空便签）")
             self.list.addItem(item)
 
-    def refresh_preview(self, note_id: str):
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            data = item.data(Qt.UserRole)
-            if isinstance(data, dict) and data.get("id") == note_id:
-                item.setText(_note_preview(data))
-                break
+    # 旧 refresh_preview 已移除：它用打开时的旧快照渲染导致便签桌不更新；
+    # 改为 Desk._note_changed 用保存后的新数据同步列表项。
 
     def closeEvent(self, _e):
         # 关窗收进托盘，不退出程序
@@ -221,9 +216,20 @@ class Desk:
             return
         w = NoteWindow(self.client, note,
                        on_need_close=self._drop,
-                       on_changed=self.win.refresh_preview)
+                       on_changed=self._note_changed)
         self.windows.append(w)
         w.show()
+
+    def _note_changed(self, note):
+        """便签保存后可调用：用最新数据更新便签桌列表项（文字 + 存储数据）。"""
+        for i in range(self.win.list.count()):
+            item = self.win.list.item(i)
+            data = item.data(Qt.UserRole)
+            if isinstance(data, dict) and data.get("id") == note.get("id"):
+                item.setData(Qt.UserRole, note)
+                item.setText(_note_preview(note))
+                item.setToolTip((note.get("content") or "")[:200] or "（空便签）")
+                break
 
     def _drop(self, w):
         if w in self.windows:

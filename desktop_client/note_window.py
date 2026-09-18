@@ -202,29 +202,49 @@ class NoteWindow(QFrame):
 
     @staticmethod
     def _darken_code(browser):
-        """Markdown 渲染后把代码设为黑底白字：整行代码块铺黑，行内代码黑片。"""
+        """Markdown 渲染后把代码设为黑底白字：整行代码块铺黑，行内代码黑片。
+        用 QTextCursor 逐字符判等宽字体（PyQt5 无可靠的片段迭代器 next()）。"""
         doc = browser.document()
         char_fmt = QTextCharFormat()
         char_fmt.setBackground(QColor(30, 30, 30))
         char_fmt.setForeground(QColor(240, 240, 240))
         block_fmt = QTextBlockFormat()
         block_fmt.setBackground(QColor(30, 30, 30))
+
         block = doc.begin()
         while block.isValid():
-            it = block.begin()
-            while not it.atEnd():
-                frag = it.fragment()
-                if frag.charFormat().fontFixedPitch():
+            start = block.position()
+            length = max(0, block.length() - 1)  # 去掉段尾分隔符
+            if length:
+                cursor = QTextCursor(doc)
+                cursor.setPosition(start)
+                # 收集该块内等宽（代码）字符的游程 [起,止]
+                runs = []
+                cur = None
+                for off in range(length):
+                    if cursor.charFormat().fontFixedPitch():
+                        if cur is None:
+                            cur = [off, off]
+                        else:
+                            cur[1] = off
+                    elif cur is not None:
+                        runs.append(cur)
+                        cur = None
+                    cursor.movePosition(QTextCursor.NextCharacter)
+                if cur is not None:
+                    runs.append(cur)
+                # 整块都是代码（围栏内一行）→ 块背景铺满该行
+                if len(runs) == 1 and runs[0] == [0, length - 1]:
+                    bc = QTextCursor(doc)
+                    bc.setPosition(start)
+                    bc.setPosition(start + length, QTextCursor.KeepAnchor)
+                    bc.setBlockFormat(block_fmt)
+                # 每个代码游程加深底白字
+                for a, b in runs:
                     c = QTextCursor(doc)
-                    c.setPosition(frag.position())
-                    c.setPosition(frag.position() + frag.length(), QTextCursor.KeepAnchor)
+                    c.setPosition(start + a)
+                    c.setPosition(start + b + 1, QTextCursor.KeepAnchor)
                     c.mergeCharFormat(char_fmt)
-                    if frag.length() == block.length() - 1:
-                        # 该块整体就是代码（围栏内一行）→ 块背景铺满该行
-                        bc = QTextCursor(block)
-                        bc.select(QTextCursor.BlockUnderCursor)
-                        bc.setBlockFormat(block_fmt)
-                it = it.next()
             block = block.next()
 
     def _save_manual(self):

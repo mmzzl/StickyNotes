@@ -183,13 +183,30 @@ class NoteWindow(QFrame):
     def moveEvent(self, _e):
         self._save_later()  # 拖动停止后延迟上报位置
 
+    @staticmethod
+    def _hard_wrap(src):
+        """把 Markdown 源码的软换行改成硬换行（行尾两空格），预览换行不被折叠成空格。
+        围栏代码块（``` / ~~~）内保持原样，避免污染代码内容。"""
+        out = []
+        in_code = False
+        for line in src.split("\n"):
+            stripped = line.rstrip()
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                in_code = not in_code
+                out.append(line)
+            elif in_code or stripped == "":
+                out.append(line)
+            else:
+                out.append(stripped + "  ")
+        return "\n".join(out)
+
     def _toggle_preview(self):
         """「预览/编辑」切换：预览态只读渲染 Markdown，源数据始终来自编辑框。"""
         self._preview_on = not self._preview_on
         if self._preview_on:
             src = self.content.toPlainText()
             if hasattr(self.preview, "setMarkdown"):
-                self.preview.setMarkdown(src or "*（空内容）*")
+                self.preview.setMarkdown(self._hard_wrap(src) or "*（空内容）*")
                 self._darken_code(self.preview)
             else:
                 self.preview.setPlainText(src or "（空内容）")

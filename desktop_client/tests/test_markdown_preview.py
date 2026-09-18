@@ -65,6 +65,20 @@ class MarkdownPreviewTest(unittest.TestCase):
         finally:
             w.close()
 
+    def test_preview_keeps_newlines(self):
+        """点预览换行不能塌成一行：Markdown 单换行会被折叠成空格，
+        _hard_wrap 要把它转成硬换行（行尾两空格），代码块原样保留。"""
+        from note_window import NoteWindow
+
+        self.assertEqual(
+            NoteWindow._hard_wrap("第一行\n第二行\n第三行"),
+            "第一行  \n第二行  \n第三行  ")
+        self.assertEqual(
+            NoteWindow._hard_wrap("```python\nx = 1\n```\n结尾"),
+            "```python\nx = 1\n```\n结尾  ")  # 围栏代码块内行不加行尾空格
+        self.assertEqual(NoteWindow._hard_wrap("空行前\n\n空行后"),
+                         "空行前  \n\n空行后  ")  # 空行原样保留
+
     def test_is_code_fmt_tolerates_missing_font_families(self):
         """QTextCharFormat 无 fontFamilies()（返回 None）时不能抛 TypeError。
         （PyQt5 的 cf.fontFamilies() 返回 None，join None 会炸。）"""

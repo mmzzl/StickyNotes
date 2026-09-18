@@ -208,8 +208,7 @@ class NoteWindow(QFrame):
         fam = " ".join(cf.fontFamilies()).lower()
         return any(k in fam for k in ("mono", "courier", "consolas", "menlo", "monospace"))
 
-    @staticmethod
-    def _darken_code(browser):
+    def _darken_code(self, browser):
         """Markdown 渲染后把代码设为黑底白字：整行代码块铺黑，行内代码黑片。
         用 QTextCursor 逐字符判等宽字体（PyQt5 无可靠的片段迭代器 next()）。"""
         doc = browser.document()

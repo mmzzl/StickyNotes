@@ -67,6 +67,36 @@ def main() -> int:
     app.setStyleSheet(APP_QSS)
     client = Client()
 
+    desk_ref = {"obj": None}
+    guard = {"busy": False}
+
+    def relogin():
+        """令牌过期(401)：静默关掉便签窗，弹回登录框；登录成功回到便签桌，取消则退出。"""
+        if guard["busy"]:
+            return
+        guard["busy"] = True
+        try:
+            client.on_auth_failed = None     # teardown 期间避免连环触发
+            old = desk_ref["obj"]
+            if old is not None:
+                old.tray.hide()
+                old.win.hide()
+                for w in list(old.windows):
+                    w.on_need_close = None   # 关窗不走 _drop，避免过期状态下再拉列表
+                    w.close()
+            dlg = LoginDialog(client)
+            dlg.exec_()
+            if dlg.ok:
+                desk_ref["obj"] = Desk(client)
+                desk_ref["obj"].show()
+                client.on_auth_failed = relogin
+            else:
+                QApplication.quit()
+        finally:
+            guard["busy"] = False
+
+    client.on_auth_failed = relogin
+
     if client.access_token:
         try:
             client.list_notes()               # 校验令牌有效性
@@ -79,7 +109,8 @@ def main() -> int:
         if not dlg.ok:
             return 0
 
-    Desk(client).show()
+    desk_ref["obj"] = Desk(client)
+    desk_ref["obj"].show()
     return app.exec_()
 
 

@@ -20,6 +20,7 @@ class Client:
         cfg = load_config()
         self.base_url = (base_url or cfg.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
         self.session = requests.Session()          # 携带 anon_sid cookie 走验证码登录
+        self.on_auth_failed = None                 # 会话过期(401)回调，由 app 挂载
         self.access_token = cfg.get("access_token", "")
         self.refresh_token = cfg.get("refresh_token", "")
         self.username = cfg.get("username", "")
@@ -60,6 +61,8 @@ class Client:
                                     json=json or {}, params=params,
                                     headers=self._headers(), timeout=10, verify=False)
         if resp.status_code >= 400:
+            if resp.status_code == 401 and self.on_auth_failed:
+                self.on_auth_failed()   # 登录过期 → 由 App 弹回登录框
             self._raise(resp)
         return resp.json().get("data")
 

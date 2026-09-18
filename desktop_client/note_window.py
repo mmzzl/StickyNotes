@@ -1,7 +1,8 @@
 """贴纸式便签窗口：无边框置顶、可拖动、可改色、关窗即存（内容/位置同步到后端）。
 ✕ 关闭=收起（内容已自动保存，可在便签桌/恢复全部中找回）；删除需右键→删除此便签并二次确认。"""
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor, QCursor, QKeySequence
+from PyQt5.QtGui import (QColor, QCursor, QKeySequence, QTextBlockFormat,
+                         QTextCharFormat, QTextCursor)
 from PyQt5.QtWidgets import (QColorDialog, QFrame, QGraphicsDropShadowEffect,
                              QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
                              QShortcut, QStackedWidget, QTextBrowser, QTextEdit,
@@ -188,6 +189,7 @@ class NoteWindow(QFrame):
             src = self.content.toPlainText()
             if hasattr(self.preview, "setMarkdown"):
                 self.preview.setMarkdown(src or "*（空内容）*")
+                self._darken_code(self.preview)
             else:
                 self.preview.setPlainText(src or "（空内容）")
             self.content_stack.setCurrentWidget(self.preview)
@@ -197,6 +199,33 @@ class NoteWindow(QFrame):
             self.content_stack.setCurrentWidget(self.content)
             self.preview_btn.setText("预览")
             self.preview_btn.setToolTip("Markdown 预览（再点回到编辑）")
+
+    @staticmethod
+    def _darken_code(browser):
+        """Markdown 渲染后把代码设为黑底白字：整行代码块铺黑，行内代码黑片。"""
+        doc = browser.document()
+        char_fmt = QTextCharFormat()
+        char_fmt.setBackground(QColor(30, 30, 30))
+        char_fmt.setForeground(QColor(240, 240, 240))
+        block_fmt = QTextBlockFormat()
+        block_fmt.setBackground(QColor(30, 30, 30))
+        block = doc.begin()
+        while block.isValid():
+            it = block.begin()
+            while not it.atEnd():
+                frag = it.fragment()
+                if frag.charFormat().fontFixedPitch():
+                    c = QTextCursor(doc)
+                    c.setPosition(frag.position())
+                    c.setPosition(frag.position() + frag.length(), QTextCursor.KeepAnchor)
+                    c.mergeCharFormat(char_fmt)
+                    if frag.length() == block.length() - 1:
+                        # 该块整体就是代码（围栏内一行）→ 块背景铺满该行
+                        bc = QTextCursor(block)
+                        bc.select(QTextCursor.BlockUnderCursor)
+                        bc.setBlockFormat(block_fmt)
+                it = it.next()
+            block = block.next()
 
     def _save_manual(self):
         """Ctrl+S：立即保存（跳过防抖）并给出已保存提示。"""

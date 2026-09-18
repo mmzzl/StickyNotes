@@ -262,14 +262,16 @@ button { font-family: inherit; cursor: pointer; }
   padding-left: 20px;
 }
 .note-md code {
-  background: rgba(0, 0, 0, .06);
+  background: #1e1e1e;
+  color: #f0f0f0;
   border-radius: 4px;
   padding: 1px 4px;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
 }
 .note-md pre.md-code {
-  background: rgba(0, 0, 0, .07);
+  background: #1e1e1e;
+  color: #f0f0f0;
   border-radius: 8px;
   padding: 8px 10px;
   margin: 6px 0;
@@ -279,7 +281,7 @@ button { font-family: inherit; cursor: pointer; }
   line-height: 1.5;
   white-space: pre;
 }
-.note-md pre.md-code code { background: transparent; padding: 0; }
+.note-md pre.md-code code { background: transparent; color: inherit; padding: 0; }
 .note-md hr { border: none; border-top: 1px dashed rgba(0, 0, 0, .2); margin: 8px 0; }
 .note-md a { color: #1a5fd0; }
 .note-md .md-empty { color: rgba(0, 0, 0, .35); font-style: italic; }

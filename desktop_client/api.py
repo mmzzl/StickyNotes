@@ -55,9 +55,10 @@ class Client:
             msg = resp.text
         raise ApiError(f"HTTP {resp.status_code}: {msg}", resp.status_code)
 
-    def _request(self, method, path, json=None):
+    def _request(self, method, path, json=None, params=None):
         resp = self.session.request(method, self._url(path),
-                                    json=json or {}, headers=self._headers(), timeout=10, verify=False)
+                                    json=json or {}, params=params,
+                                    headers=self._headers(), timeout=10, verify=False)
         if resp.status_code >= 400:
             self._raise(resp)
         return resp.json().get("data")
@@ -95,9 +96,13 @@ class Client:
         save_config(cfg)
 
     # ---- 便签 ----
-    def list_notes(self):
-        items = self._request("GET", "/notes") or []
-        return sorted(items, key=lambda n: n.get("updated_at") or "", reverse=True)
+    def list_notes(self, q="", page=1, page_size=200):
+        """分页+关键字搜索列表；返回 (items, total)。"""
+        data = self._request("GET", "/notes", params={
+            "q": q, "page": page, "page_size": page_size}) or {}
+        items = sorted(data.get("items") or [],
+                       key=lambda n: n.get("updated_at") or "", reverse=True)
+        return items, data.get("total") or 0
 
     def create_note(self, title="", content="", color="#fff9c4", x=0, y=0):
         return self._request("POST", "/notes", {

@@ -7,6 +7,7 @@
   const COLORS = ['#fff9c4', '#ffd8d8', '#d7f0ff', '#d8f5d8', '#f5e0ff', '#fff0d0'];
   let currentUser = null;
   let noteSeq = 0;
+  const listState = { q: '', page: 1, total: 0, size: 100 };
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -259,20 +260,36 @@
   }
 
   async function refreshDesk() {
-    const notes = (await api('GET', '/notes')) || [];
-    // 先清除非草稿元素（草稿留在原处防误毁）
+    const params = new URLSearchParams({ page: listState.page, page_size: listState.size });
+    if (listState.q) params.set('q', listState.q);
+    const d = (await api('GET', '/notes?' + params.toString())) || { items: [], total: 0 };
+    listState.total = d.total || 0;
+    const pages = Math.max(1, Math.ceil(listState.total / listState.size));
+    if (listState.page > pages) { listState.page = pages; }
+    // 清除非草稿元素（草稿留在原处防误毁）
     document.querySelectorAll('.note:not([data-id^="tmp-"])').forEach((n) => n.remove());
     const board = $('#board');
-    notes.forEach((note) => {
-      const el = makeNoteEl(note);
-      board.appendChild(el);
-    });
+    (d.items || []).forEach((note) => board.appendChild(makeNoteEl(note)));
+    renderPager();
     refreshEmptyHint();
+  }
+
+  function renderPager() {
+    const pages = Math.max(1, Math.ceil(listState.total / listState.size));
+    $('#pager-info').textContent =
+      '第 ' + listState.page + ' / ' + pages + ' 页 · 共 ' + listState.total + ' 条';
+    $('#btn-prev').disabled = listState.page <= 1;
+    $('#btn-next').disabled = listState.page >= pages;
   }
 
   function refreshEmptyHint() {
     const has = $('#board').querySelectorAll('.note').length > 0;
     $('#empty-hint').classList.toggle('hidden', has);
+    if (!has) {
+      const hint = $('#empty-hint .empty-note');
+      if (listState.q) hint.textContent = '没有匹配“' + listState.q + '”的便签，换个关键字，或点 ＋ 新建一个。';
+      else hint.textContent = '双击或点击右下角「＋ 新建便签」，贴一张到屏幕上';
+    }
   }
 
   async function createNote() {
@@ -282,14 +299,12 @@
     const x = Math.max(0, Math.round((vw - w) / 2 + (Math.random() - 0.5) * 140));
     const y = Math.max(0, Math.round((vh - h) / 2 + (Math.random() - 0.5) * 120));
     const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-    const note = await api('POST', '/notes', {
+    await api('POST', '/notes', {
       title: '', content: '', color, pos_x: x, pos_y: y,
     });
-    const el = makeNoteEl(note);
-    board.appendChild(el);
-    refreshEmptyHint();
-    el.querySelector('.note-content').focus();
-    return el;
+    await refreshDesk();
+    const el = $('#board .note:last-child');
+    if (el) el.querySelector('.note-content').focus();
   }
 
   /* ---------- 绑定事件 ---------- */
@@ -335,6 +350,26 @@
     $('#btn-logout').addEventListener('click', logout);
     $('#btn-new').addEventListener('click', () => createNote().catch(showError));
     $('#btn-admin').addEventListener('click', () => { window.open('/admin/', '_blank'); });
+
+    // 搜索（防抖）与分页
+    let searchTimer;
+    $('#search').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        listState.q = $('#search').value.trim();
+        listState.page = 1;
+        refreshDesk().catch((e) => window.alert('加载失败：' + e.message));
+      }, 300);
+    });
+    $('#btn-prev').addEventListener('click', () => {
+      if (listState.page <= 1) return;
+      listState.page--;
+      refreshDesk().catch((e) => window.alert('加载失败：' + e.message));
+    });
+    $('#btn-next').addEventListener('click', () => {
+      listState.page++;
+      refreshDesk().catch((e) => window.alert('加载失败：' + e.message));
+    });
   }
 
   function showError(msg) {
@@ -347,6 +382,8 @@
     currentUser = await fetchMe();
     $('#user-chip').textContent = currentUser.display_name || currentUser.username;
     $('#btn-admin').classList.toggle('hidden', !hasAdminPerm(currentUser));
+    listState.q = ''; listState.page = 1;
+    $('#search').value = '';
     showDesk();
     await refreshDesk();
   }

@@ -2,8 +2,8 @@
 from PyQt5.QtCore import QPointF, QRectF, Qt
 from PyQt5.QtGui import QColor, QIcon, QPainter, QPainterPath, QPixmap
 from PyQt5.QtWidgets import (QAction, QApplication, QFrame, QHBoxLayout, QLabel,
-                             QListWidget, QListWidgetItem, QMainWindow, QMenu,
-                             QMessageBox, QPushButton, QSystemTrayIcon,
+                             QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
+                             QMenu, QMessageBox, QPushButton, QSystemTrayIcon,
                              QVBoxLayout, QWidget)
 
 from api import Client
@@ -96,6 +96,27 @@ class DeskWindow(QMainWindow):
         bl.addWidget(self.btn_quit)
         lay.addWidget(bar)
 
+        # ---- 搜索 / 计数 / 加载更多 ----
+        frow = QWidget()
+        fl = QHBoxLayout(frow)
+        fl.setContentsMargins(12, 8, 12, 0)
+        fl.setSpacing(8)
+        self.search = QLineEdit()
+        self.search.setObjectName("DeskSearch")
+        self.search.setPlaceholderText("搜索标题/内容（回车）")
+        self.search.returnPressed.connect(self.desk.on_search)
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("DeskCount")
+        self.load_more = QPushButton("加载更多")
+        self.load_more.setObjectName("BtnGhost")
+        self.load_more.setCursor(Qt.PointingHandCursor)
+        self.load_more.clicked.connect(self.desk.load_more)
+        self.load_more.hide()
+        fl.addWidget(self.search, 1)
+        fl.addWidget(self.count_label)
+        fl.addWidget(self.load_more)
+        lay.addWidget(frow)
+
         # ---- 便签列表 ----
         self.list = QListWidget()
         self.list.setObjectName("DeskList")
@@ -113,16 +134,17 @@ class DeskWindow(QMainWindow):
         if isinstance(note, dict):
             self.desk.open_note(note)
 
-    def refresh_list(self):
+    def set_items(self, items):
         self.list.clear()
-        for note in self.desk.notes():
+        for note in items:
             item = QListWidgetItem(_note_preview(note))
             item.setData(Qt.UserRole, note)
             item.setToolTip((note.get("content") or "")[:200] or "（空便签）")
             self.list.addItem(item)
 
-    # 旧 refresh_preview 已移除：它用打开时的旧快照渲染导致便签桌不更新；
-    # 改为 Desk._note_changed 用保存后的新数据同步列表项。
+    def confirm_loaded(self, loaded, total):
+        self.count_label.setText(f"显示 {loaded} / 共 {total} 条")
+        self.load_more.setVisible(total > loaded)
 
     def closeEvent(self, _e):
         # 关窗收进托盘，不退出程序
@@ -139,6 +161,11 @@ class Desk:
     def __init__(self, client: Client):
         self.client = client
         self.windows: list[NoteWindow] = []
+        self._items: list[dict] = []
+        self._total = 0
+        self._page = 1
+        self._q = ""
+        self._PAGE_SIZE = 200
 
         self.tray = QSystemTrayIcon(make_sticky_icon(), QApplication.instance())
         self.tray.setToolTip("便签")
@@ -175,26 +202,51 @@ class Desk:
         self.tray.hide()
         QApplication.quit()
 
-    # ---- 数据 ----
+    # ---- 数据（分页 + 搜索）----
     def notes(self):
-        try:
-            return self.client.list_notes()
-        except Exception as e:  # noqa: BLE001
-            QMessageBox.warning(self.win, "提示", f"加载便签失败: {e}")
-            return []
+        return list(self._items)
 
     def reload(self):
-        self.win.refresh_list()
+        self.reload_page(reset=True)
+
+    def reload_page(self, reset=False):
+        if reset:
+            self._page = 1
+            self._items = []
+        try:
+            items, total = self.client.list_notes(
+                q=self._q, page=self._page, page_size=self._PAGE_SIZE)
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.warning(self.win, "提示", f"加载便签失败: {e}")
+            return
+        if reset:
+            self._items = items
+        else:
+            self._items.extend(items)
+        self._total = total
+        self.win.set_items(self._items)
+        self.win.confirm_loaded(len(self._items), self._total)
+
+    def load_more(self):
+        self._page += 1
+        self.reload_page()
+
+    def on_search(self):
+        self._q = (self.win.search.text() or "").strip()
+        self.reload_page(reset=True)
 
     # ---- 便签操作 ----
     def new_note(self):
+        # 新建后回到第一页并清空搜索，保证新便签立刻可见
+        self._q = ""
+        self.win.search.setText("")
         try:
             note = self.client.create_note()
         except Exception as e:  # noqa: BLE001
             QMessageBox.warning(self.win, "提示", str(e))
             return
         self.spawn(note)
-        self.win.refresh_list()
+        self.reload_page(reset=True)
 
     def open_note(self, note):
         """列表中已有则前置，否则打开贴纸窗口。"""
@@ -209,7 +261,7 @@ class Desk:
     def restore_all(self):
         for n in self.notes():
             self.spawn(n, restore=True)
-        self.win.refresh_list()
+        self.reload_page(reset=True)
 
     def spawn(self, note, restore=False):
         if restore and any(w.note.get("id") == note.get("id") for w in self.windows):
@@ -234,4 +286,4 @@ class Desk:
     def _drop(self, w):
         if w in self.windows:
             self.windows.remove(w)
-        self.win.refresh_list()
+        self.reload_page(reset=True)

@@ -4,10 +4,18 @@ from core.exceptions import NotFoundError
 from repositories import notes
 
 
-async def list_notes(owner_id: str) -> list:
-    """当前用户全部便签（按 updated_at 倒序）。"""
-    rows = await notes._find_all({"owner_id": owner_id})
-    return sorted(rows, key=lambda n: (n.get("updated_at") or ""), reverse=True)
+async def list_notes(owner_id: str, q: str = "", page: int = 1, page_size: int = 100):
+    """本人便签分页列表（按 updated_at 倒序）；q 对标题/内容不区分大小写模糊匹配。"""
+    keyword = q.strip() or None
+    rows, total = await notes.list(
+        filters={"owner_id": owner_id},
+        keyword=keyword,
+        keyword_fields=["title", "content"],
+        page=max(1, page),
+        size=max(1, min(page_size, 500)),
+    )
+    rows = sorted(rows, key=lambda n: (n.get("updated_at") or ""), reverse=True)
+    return rows, total
 
 
 async def create_note(owner_id: str, data: dict) -> dict:

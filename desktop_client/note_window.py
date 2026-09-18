@@ -201,6 +201,14 @@ class NoteWindow(QFrame):
             self.preview_btn.setToolTip("Markdown 预览（再点回到编辑）")
 
     @staticmethod
+    def _is_code_fmt(cf):
+        """判断字符格式是否代表代码：固定字宽 或 等宽字体族（兼容各 Qt 版本）。"""
+        if cf.fontFixedPitch():
+            return True
+        fam = " ".join(cf.fontFamilies()).lower()
+        return any(k in fam for k in ("mono", "courier", "consolas", "menlo", "monospace"))
+
+    @staticmethod
     def _darken_code(browser):
         """Markdown 渲染后把代码设为黑底白字：整行代码块铺黑，行内代码黑片。
         用 QTextCursor 逐字符判等宽字体（PyQt5 无可靠的片段迭代器 next()）。"""
@@ -222,7 +230,7 @@ class NoteWindow(QFrame):
                 runs = []
                 cur = None
                 for off in range(length):
-                    if cursor.charFormat().fontFixedPitch():
+                    if self._is_code_fmt(cursor.charFormat()):
                         if cur is None:
                             cur = [off, off]
                         else:

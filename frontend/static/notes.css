@@ -130,7 +130,32 @@ button { font-family: inherit; cursor: pointer; }
 }
 .brand { font-size: 19px; font-weight: 700; color: #57450a; }
 .brand span { vertical-align: 2px; }
+.search-box {
+  flex: 0 1 240px;
+  margin-left: 18px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+.search-box:focus { border-color: var(--primary); }
 .top-actions { display: flex; align-items: center; gap: 12px; }
+
+/* 分页条 */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, .7);
+  border-top: 1px solid #ece9df;
+  font-size: 13px;
+  color: #777;
+}
+.pager button:disabled { opacity: .4; cursor: default; }
 .user-chip {
   background: #fff3cd;
   color: #7a5c00;

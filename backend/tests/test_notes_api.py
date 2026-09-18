@@ -49,9 +49,10 @@ async def test_notes_crud(client):
     assert r2.status_code == 200
 
     lst = (await client.get("/api/v1/notes", headers=h)).json()["data"]
-    assert len(lst) == 2
-    assert all(n["owner_id"] == n1["owner_id"] for n in lst)
-    assert all(n["color"] == "#fff9c4" for n in lst)
+    assert len(lst["items"]) == 2
+    assert lst["total"] == 2
+    assert all(n["owner_id"] == n1["owner_id"] for n in lst["items"])
+    assert all(n["color"] == "#fff9c4" for n in lst["items"])
 
     up = await client.put(f"/api/v1/notes/{n1['id']}", headers=h,
                           json={"title": "a2", "color": "#ffd54f", "pos_x": 88})
@@ -62,7 +63,43 @@ async def test_notes_crud(client):
 
     dl = await client.delete(f"/api/v1/notes/{n1['id']}", headers=h)
     assert dl.status_code == 200
-    assert len((await client.get("/api/v1/notes", headers=h)).json()["data"]) == 1
+    lst = (await client.get("/api/v1/notes", headers=h)).json()["data"]
+    assert len(lst["items"]) == 1 and lst["total"] == 1
+
+
+async def test_notes_search_and_pagination(client):
+    """关键字搜索（标题/内容）+ 分页返回 items/total/page/size。"""
+    token = await _make_user(client, "searcher")
+    h = await _auth(client, token)
+    for i in range(5):
+        await client.post("/api/v1/notes", headers=h, json={
+            "title": f"待办 {i}", "content": "买牛奶" if i % 2 == 0 else "开会纪要"})
+
+    # 默认全量
+    d = (await client.get("/api/v1/notes", headers=h)).json()["data"]
+    assert d["total"] == 5 and len(d["items"]) == 5 and d["size"] == 100
+
+    # 标题关键字
+    d = (await client.get("/api/v1/notes", headers=h, params={"q": "待办 3"})).json()["data"]
+    assert d["total"] == 1 and len(d["items"]) == 1
+    assert d["items"][0]["title"] == "待办 3"
+
+    # 内容关键字（买牛奶 → 0/2/4）
+    d = (await client.get("/api/v1/notes", headers=h, params={"q": "牛奶"})).json()["data"]
+    assert d["total"] == 3
+
+    # 分页切片
+    d = (await client.get("/api/v1/notes", headers=h,
+                          params={"page": 1, "page_size": 2})).json()["data"]
+    assert d["total"] == 5 and len(d["items"]) == 2 and d["page"] == 1 and d["size"] == 2
+    d = (await client.get("/api/v1/notes", headers=h,
+                          params={"page": 3, "page_size": 2})).json()["data"]
+    assert len(d["items"]) == 1
+
+    # 搜索 + 分页组合
+    d = (await client.get("/api/v1/notes", headers=h,
+                          params={"q": "待办", "page": 1, "page_size": 2})).json()["data"]
+    assert d["total"] == 5 and len(d["items"]) == 2
 
 
 async def test_notes_owner_isolated(client):
@@ -73,7 +110,7 @@ async def test_notes_owner_isolated(client):
     nid = (await client.post("/api/v1/notes", headers=ha, json={"title": "secret"})
            ).json()["data"]["id"]
 
-    assert len((await client.get("/api/v1/notes", headers=hb)).json()["data"]) == 0
+    assert len((await client.get("/api/v1/notes", headers=hb)).json()["data"]["items"]) == 0
 
     assert (await client.put(f"/api/v1/notes/{nid}", headers=hb, json={"title": "hack"})) \
         .status_code == 404

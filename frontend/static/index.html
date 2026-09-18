@@ -56,6 +56,7 @@
   <div id="desk-view" class="hidden">
     <header class="topbar">
       <div class="brand">📝 <span>我的便签</span></div>
+      <input id="search" class="search-box" type="search" placeholder="搜索标题/内容…" autocomplete="off" />
       <div class="top-actions">
         <button type="button" id="btn-admin" class="btn-ghost hidden">管理后台</button>
         <span class="user-chip" id="user-chip"></span>
@@ -68,6 +69,12 @@
         <div class="empty-note">双击或点击右下角「＋ 新建便签」，贴一张到屏幕上</div>
       </div>
     </main>
+
+    <footer class="pager" id="pager">
+      <button type="button" id="btn-prev" class="btn-ghost">← 上一页</button>
+      <span id="pager-info">…</span>
+      <button type="button" id="btn-next" class="btn-ghost">下一页 →</button>
+    </footer>
 
     <button id="btn-new" class="fab" title="新建便签">＋</button>
   </div>

@@ -1,9 +1,9 @@
 """便签 CRUD 路由。"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from core.dependencies import CurrentUserDep, require_permission
-from core.response import ok
+from core.response import ok, paged
 from schemas.note import NoteCreate, NoteUpdate
 from services import note_service
 
@@ -11,8 +11,12 @@ router = APIRouter(prefix="/notes", tags=["便签"])
 
 
 @router.get("", dependencies=[Depends(require_permission("note:list"))])
-async def list_notes(user: CurrentUserDep):
-    return ok(await note_service.list_notes(user.id))
+async def list_notes(user: CurrentUserDep,
+                     q: str = Query("", description="标题/内容关键字"),
+                     page: int = Query(1, ge=1),
+                     page_size: int = Query(100, ge=1, le=500)):
+    items, total = await note_service.list_notes(user.id, q=q, page=page, page_size=page_size)
+    return ok(paged(items, total, page, page_size))
 
 
 @router.post("", dependencies=[Depends(require_permission("note:create"))])

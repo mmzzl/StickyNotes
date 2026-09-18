@@ -34,6 +34,8 @@ QPushButton#BtnGhost { background: transparent; border: 1px solid #ccc; }
 QFrame#DeskBar { background: #fbf9f2; border-bottom: 1px solid #e6e2d2; }
 QLabel#DeskBrand { font-size: 19px; font-weight: 700; color: #57450a; }
 QLabel#DeskUser { color: #907c3a; font-size: 13px; }
+QLineEdit#DeskSearch { padding: 5px 10px; }
+QLabel#DeskCount { color: #999; font-size: 12px; }
 QListWidget#DeskList {
     background: #f7f5ee; border: none; padding: 10px;
 }

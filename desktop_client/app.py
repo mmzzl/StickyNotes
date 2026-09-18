@@ -95,9 +95,9 @@ def main() -> int:
         finally:
             guard["busy"] = False
 
-    client.on_auth_failed = relogin
-
     if client.access_token:
+        # 启动校验令牌：此时不挂 401 回调，失效只清空 token 交给下方登录框，
+        # 否则 401 会触发 relogin 弹框，登录成功后 expect 又清 token，再弹一次
         try:
             client.list_notes()               # 校验令牌有效性
         except Exception:                     # noqa: BLE001
@@ -109,6 +109,7 @@ def main() -> int:
         if not dlg.ok:
             return 0
 
+    client.on_auth_failed = relogin           # 登录完成后再挂运行时 401 回调
     desk_ref["obj"] = Desk(client)
     desk_ref["obj"].show()
     return app.exec_()

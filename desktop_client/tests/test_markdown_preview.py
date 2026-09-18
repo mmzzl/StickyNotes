@@ -49,6 +49,22 @@ class MarkdownPreviewTest(unittest.TestCase):
         finally:
             w.close()
 
+    def test_reopen_preserves_newlines(self):
+        """重开便签时换行不能丢：构造函数按 HTML 解析会把 \n 塌成空格，
+        NoteWindow 必须用 setPlainText 入数据。"""
+        from api import Client
+        from note_window import NoteWindow
+
+        c = Client(base_url="http://127.0.0.1:1")
+        note = {"id": "n2", "title": "多行",
+                "content": "第一行\n第二行\n第三行",
+                "color": "#fff9c4", "pos_x": 0, "pos_y": 0}
+        w = NoteWindow(c, note)
+        try:
+            self.assertEqual(w.content.toPlainText(), "第一行\n第二行\n第三行")
+        finally:
+            w.close()
+
     def test_is_code_fmt_tolerates_missing_font_families(self):
         """QTextCharFormat 无 fontFamilies()（返回 None）时不能抛 TypeError。
         （PyQt5 的 cf.fontFamilies() 返回 None，join None 会炸。）"""

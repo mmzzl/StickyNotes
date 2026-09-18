@@ -92,7 +92,8 @@ class NoteWindow(QFrame):
         self.title.setObjectName("NoteTitle")
         self.title.setPlaceholderText("标题…")
         self.title.textChanged.connect(lambda _: self._save_later())
-        self.content = QTextEdit(note.get("content") or "")
+        self.content = QTextEdit()
+        self.content.setPlainText(note.get("content") or "")  # setPlainText 保留换行（构造函数会按 HTML 塌掉换行）
         self.content.setObjectName("NoteContent")
         self.content.setPlaceholderText("写点什么…（支持 Markdown，点「预览」看成稿）")
         self.content.textChanged.connect(self._save_later)

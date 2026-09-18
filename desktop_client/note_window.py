@@ -4,7 +4,8 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QCursor, QKeySequence
 from PyQt5.QtWidgets import (QColorDialog, QFrame, QGraphicsDropShadowEffect,
                              QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox,
-                             QShortcut, QTextEdit, QToolButton, QVBoxLayout, QWidget)
+                             QShortcut, QStackedWidget, QTextBrowser, QTextEdit,
+                             QToolButton, QVBoxLayout, QWidget)
 
 
 class _DragBar(QWidget):
@@ -62,6 +63,12 @@ class NoteWindow(QFrame):
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setToolTip("立即保存（Ctrl+S）")
         self.save_btn.clicked.connect(self._save_manual)
+        self.preview_btn = QToolButton()
+        self.preview_btn.setText("预览")
+        self.preview_btn.setObjectName("SaveBtn")
+        self.preview_btn.setCursor(Qt.PointingHandCursor)
+        self.preview_btn.setToolTip("Markdown 预览（再点回到编辑）")
+        self.preview_btn.clicked.connect(self._toggle_preview)
         self.del_btn = QToolButton()
         self.del_btn.setText("✕")
         self.del_btn.setObjectName("DelBtn")
@@ -74,6 +81,7 @@ class NoteWindow(QFrame):
         bbar.setSpacing(2)
         bbar.addWidget(grip)
         bbar.addStretch(1)
+        bbar.addWidget(self.preview_btn)
         bbar.addWidget(self.save_btn)
         bbar.addWidget(self.color_btn)
         bbar.addWidget(self.del_btn)
@@ -85,8 +93,18 @@ class NoteWindow(QFrame):
         self.title.textChanged.connect(lambda _: self._save_later())
         self.content = QTextEdit(note.get("content") or "")
         self.content.setObjectName("NoteContent")
-        self.content.setPlaceholderText("写点什么…")
+        self.content.setPlaceholderText("写点什么…（支持 Markdown，点「预览」看成稿）")
         self.content.textChanged.connect(self._save_later)
+
+        # Markdown 只读预览（Qt 5.14+ 自带 setMarkdown，无需额外依赖）
+        self.preview = QTextBrowser()
+        self.preview.setObjectName("MdPreview")
+        self.preview.setOpenExternalLinks(True)
+        self.preview.setFrameStyle(0)
+        self.content_stack = QStackedWidget()
+        self.content_stack.addWidget(self.content)   # index 0 编辑
+        self.content_stack.addWidget(self.preview)   # index 1 预览
+        self._preview_on = False
 
         # Ctrl+S 立即保存提示（右下角小字）
         self.save_status = QLabel("✓ 已保存")
@@ -99,7 +117,7 @@ class NoteWindow(QFrame):
         body.setSpacing(0)
         body.addWidget(bar)
         body.addWidget(self.title)
-        body.addWidget(self.content, 1)
+        body.addWidget(self.content_stack, 1)
         body.addWidget(self.save_status)
 
         # 平台标准保存快捷键（Windows/Linux Ctrl+S；macOS Cmd+S）
@@ -144,6 +162,8 @@ class NoteWindow(QFrame):
             " font-size: 14px; font-weight: 700; padding: 4px 12px 2px; }"
             "#NoteContent { border: none; background: transparent;"
             " font-size: 13px; line-height: 1.55; padding: 2px 12px 10px; }"
+            "QTextBrowser#MdPreview { border: none; background: transparent;"
+            " font-size: 13px; line-height: 1.55; padding: 2px 12px 10px; }"
             "#SaveStatus { background: transparent; color: rgba(0,0,0,0.45);"
             " font-size: 11px; padding: 0 12px 6px; }"
             % color)
@@ -160,6 +180,23 @@ class NoteWindow(QFrame):
 
     def moveEvent(self, _e):
         self._save_later()  # 拖动停止后延迟上报位置
+
+    def _toggle_preview(self):
+        """「预览/编辑」切换：预览态只读渲染 Markdown，源数据始终来自编辑框。"""
+        self._preview_on = not self._preview_on
+        if self._preview_on:
+            src = self.content.toPlainText()
+            if hasattr(self.preview, "setMarkdown"):
+                self.preview.setMarkdown(src or "*（空内容）*")
+            else:
+                self.preview.setPlainText(src or "（空内容）")
+            self.content_stack.setCurrentWidget(self.preview)
+            self.preview_btn.setText("编辑")
+            self.preview_btn.setToolTip("回到 Markdown 源码编辑")
+        else:
+            self.content_stack.setCurrentWidget(self.content)
+            self.preview_btn.setText("预览")
+            self.preview_btn.setToolTip("Markdown 预览（再点回到编辑）")
 
     def _save_manual(self):
         """Ctrl+S：立即保存（跳过防抖）并给出已保存提示。"""

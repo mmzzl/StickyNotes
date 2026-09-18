@@ -85,10 +85,12 @@
           <button class="dot" data-c="#f5e0ff"></button>
           <button class="dot" data-c="#fff0d0"></button>
         </div>
-        <button class="note-del" title="关闭便签">✕</button>
+        <button class="note-md-toggle" title="Markdown 预览/编辑">预览</button>
+        <button class="note-del" title="关闭便签（内容已自动保存）">✕</button>
       </div>
       <input class="note-title" placeholder="标题" maxlength="256" />
-      <textarea class="note-content" placeholder="写点什么…" rows="5"></textarea>
+      <textarea class="note-content" placeholder="写点什么…（支持 Markdown，点「预览」看成稿）" rows="5"></textarea>
+      <div class="note-md hidden"></div>
     </article>
   </template>
 

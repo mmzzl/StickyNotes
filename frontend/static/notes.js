@@ -14,6 +14,72 @@
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+  /* ---------- Markdown 轻量渲染 ----------
+     先转义 HTML（防 XSS），再应用子集：标题 / 列表 / 代码块 / 行内码 /
+     加粗 / 斜体 / 链接。离线自包含、无 CDN 依赖。 */
+  function mdInline(t) {
+    // 行内代码先摘出保护，避免内部标点被二次加工；内部同样转义
+    const codeRe = /`([^`]+)`/g;
+    const segs = [];
+    let lastIndex = 0, m;
+    while ((m = codeRe.exec(t)) !== null) {
+      segs.push(esc(t.slice(lastIndex, m.index)), '<code>' + esc(m[1]) + '</code>');
+      lastIndex = m.index + m[0].length;
+    }
+    segs.push(esc(t.slice(lastIndex)));
+    let s = segs.join('');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (all, txt, url) =>
+      '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener noreferrer">' + txt + '</a>');
+    return s;
+  }
+
+  function mdToHtml(src) {
+    if (!src || !src.trim()) return '<p class="md-empty">（空内容）</p>';
+    const lines = src.split('\n');
+    const out = [];
+    const fenceRe = /^```(\w*)\s*$/;
+    let inCode = false, codeBuf = [];
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const fence = fenceRe.exec(raw);
+      if (fence) {
+        if (!inCode) { inCode = true; codeBuf = []; }
+        else { inCode = false; out.push('<pre class="md-code">' + esc(codeBuf.join('\n')) + '</pre>'); }
+        continue;
+      }
+      if (inCode) { codeBuf.push(raw); continue; }
+      const t = raw.replace(/\r$/, '');
+      const trimmed = t.trim();
+      if (!trimmed) { out.push(''); continue; }
+      const h = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+      if (h) { const n = h[1].length; out.push('<h' + n + '>' + mdInline(h[2]) + '</h' + n + '>'); continue; }
+      const ul = /^([-*+])\s+(.*)$/.exec(trimmed);
+      if (ul) { out.push('<li>' + mdInline(ul[2]) + '</li>'); continue; }
+      const ol = /^(\d+)[.、)]\s+(.*)$/.exec(trimmed);
+      if (ol) { out.push('<li class="md-ol" value="' + ol[1].replace(/"/g, '&quot;') + '">' + mdInline(ol[2]) + '</li>'); continue; }
+      if (/^-{3,}$/.test(trimmed)) { out.push('<hr>'); continue; }
+      out.push('<p>' + mdInline(t) + '</p>');
+    }
+    if (inCode) out.push('<pre class="md-code">' + esc(codeBuf.join('\n')) + '</pre>');
+    // 相邻 li 合并成 <ul>/<ol>
+    const html = [];
+    for (let i = 0; i < out.length; i++) {
+      const l = out[i];
+      if (l.indexOf('<li') === 0) {
+        const tag = /<li class="md-ol"/.test(l) ? 'ol' : 'ul';
+        const items = [];
+        while (i < out.length && out[i].indexOf('<li') === 0) { items.push(out[i]); i++; }
+        i--;
+        html.push('<' + tag + '>' + items.join('') + '</' + tag + '>');
+      } else {
+        html.push(l);
+      }
+    }
+    return html.join('\n');
+  }
+
   /* ---------- API ---------- */
   const token = () => localStorage.getItem(TOKEN_KEY) || '';
 
@@ -123,6 +189,24 @@
     const content = el.querySelector('.note-content');
     title.addEventListener('input', () => saveNoteSoon(idOf(el), false));
     content.addEventListener('input', () => saveNoteSoon(idOf(el), false));
+
+    // Markdown 预览/编辑 切换（源数据始终在 textarea）
+    const mdBlock = el.querySelector('.note-md');
+    const mdToggle = el.querySelector('.note-md-toggle');
+    let previewOn = false;
+    mdToggle.addEventListener('click', () => {
+      previewOn = !previewOn;
+      if (previewOn) {
+        mdBlock.innerHTML = mdToHtml(content.value);
+        mdBlock.classList.remove('hidden');
+        content.classList.add('hidden');
+        mdToggle.textContent = '编辑';
+      } else {
+        mdBlock.classList.add('hidden');
+        content.classList.remove('hidden');
+        mdToggle.textContent = '预览';
+      }
+    });
 
     // 拖动（按拖动条）
     el.querySelector('.note-drag').addEventListener('pointerdown', (ev) => startDrag(ev, el));

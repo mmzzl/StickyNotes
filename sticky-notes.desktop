@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=StickyNotes
+Name[zh_CN]=便签
+Comment=桌面便签客户端
+Comment[zh_CN]=桌面便签客户端
+Exec=/usr/local/bin/StickyNotes
+Icon=sticky-notes
+Type=Application
+Terminal=false
+Categories=Office;
+StartupNotify=true

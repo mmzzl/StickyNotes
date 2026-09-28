@@ -1,6 +1,15 @@
 """便签客户端入口：有令牌则进便签桌，无效则回登录框。"""
+import os
 import sys
 
+from sticky_log import get_logger, log_path, setup_logging
+
+setup_logging()      # 尽量早，其余模块的 logger 都靠它落文件
+log = get_logger("app")
+
+# QtWebEngineWidgets 必须在 QApplication 创建之前导入（Qt 硬性要求），
+# 所见即所得编辑器依赖它，所以放在最前面。
+import md_editor  # noqa: F401  # noqa: E402
 from PyQt5.QtWidgets import QApplication
 
 from api import Client
@@ -66,6 +75,8 @@ def main() -> int:
     app.setQuitOnLastWindowClosed(False)     # 托盘常驻
     app.setStyleSheet(APP_QSS)
     client = Client()
+    log.info("启动 pid=%d 日志=%s 便签服务=%s", os.getpid(), log_path(),
+             client.base_url)
 
     desk_ref = {"obj": None}
     guard = {"busy": False}

@@ -1,0 +1,24 @@
+[Unit]
+Description=sticky-notes backend service
+After=network.target
+
+[Service]
+User=home
+Group=home
+LimitMEMLOCK=infinity
+LimitNOFILE=65536
+Type=simple
+# 启动命令
+ExecStart=/data/work/sticky-notes/start.sh start
+# systemctl stop 时，systemd会直接给主进程发信号，也保留你的stop脚本备选
+# ExecStop=/apps/new_apps/sticky-notes/start.sh stop
+# 推荐：让systemd直接管理uvicorn主进程，不用自己写stop脚本
+# 若想使用脚本里的stop逻辑，就启用上面ExecStop
+
+# 进程挂掉自动重启（可选，生产推荐）
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+

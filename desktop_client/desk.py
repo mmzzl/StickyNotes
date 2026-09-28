@@ -7,7 +7,11 @@ from PyQt5.QtWidgets import (QAction, QApplication, QFrame, QHBoxLayout, QLabel,
                              QVBoxLayout, QWidget)
 
 from api import Client
+from config import load_view_modes
 from note_window import NoteWindow
+from sticky_log import get_logger
+
+_log = get_logger("desk")
 
 
 def make_sticky_icon() -> QIcon:
@@ -35,12 +39,13 @@ def make_sticky_icon() -> QIcon:
     return QIcon(pm)
 
 
-def _note_preview(note: dict, limit: int = 40) -> str:
-    title = (note.get("title") or "").strip()
-    content = (note.get("content") or "").replace("\n", " ").strip()
-    if title:
-        return title if not content else f"{title}　·　{content}"
-    return content[:limit] if content else "(无标题)"
+def _note_label(note: dict) -> str:
+    """列表里只显示标题。
+
+    早前会把正文拼在标题后面（"标题　·　正文"），但便签正文现在可能有标题、
+    列表、代码块，拼出来又长又乱，列表扫读体验很差。正文改用悬停提示查看。
+    """
+    return (note.get("title") or "").strip() or "(无标题)"
 
 
 class DeskWindow(QMainWindow):
@@ -137,7 +142,7 @@ class DeskWindow(QMainWindow):
     def set_items(self, items):
         self.list.clear()
         for note in items:
-            item = QListWidgetItem(_note_preview(note))
+            item = QListWidgetItem(_note_label(note))
             item.setData(Qt.UserRole, note)
             item.setToolTip((note.get("content") or "")[:200] or "（空便签）")
             self.list.addItem(item)
@@ -266,6 +271,9 @@ class Desk:
     def spawn(self, note, restore=False):
         if restore and any(w.note.get("id") == note.get("id") for w in self.windows):
             return
+        _log.info("打开便签《%s》id=%s 恢复全部=%s 记忆模式=%s",
+                  note.get("title"), note.get("id"), restore,
+                  load_view_modes().get(str(note.get("id") or ""), "无（默认源码）"))
         w = NoteWindow(self.client, note,
                        on_need_close=self._drop,
                        on_changed=self._note_changed)
@@ -279,7 +287,7 @@ class Desk:
             data = item.data(Qt.UserRole)
             if isinstance(data, dict) and data.get("id") == note.get("id"):
                 item.setData(Qt.UserRole, note)
-                item.setText(_note_preview(note))
+                item.setText(_note_label(note))
                 item.setToolTip((note.get("content") or "")[:200] or "（空便签）")
                 break
 

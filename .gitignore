@@ -15,3 +15,10 @@ build/
 *.egg-info/
 .idea/
 .vscode/
+# 打包产物备份（根目录那个 160MB 单文件，别进版本库；desktop_client/dist 已忽略）
+/StickyNotes.bin
+/StickyNotes.bin.bak-*
+# 整个项目的重复副本（打包/部署时的临时拷贝，不是源码）
+/sticky-notes/
+# agent 运行时元数据
+.cospowers/

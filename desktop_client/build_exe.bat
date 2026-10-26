@@ -21,9 +21,12 @@ if not exist venv (
 echo [安装依赖 + PyInstaller] ...
 venv\Scripts\python -m pip install -q -r requirements.txt pyinstaller
 
-venv\Scripts\pyinstaller --noconfirm --clean --windowed --onefile ^
-  --name StickyNotes ^
-  app.py
+REM 必须走 StickyNotes.spec 而不是裸跑 app.py：只有 spec 里有
+REM   datas=[('vendor','vendor')]（排版视图用的 marked/turndown JS）
+REM   和 QtWebEngine 的 hiddenimports。直接 pyinstaller app.py 会漏掉
+REM   vendor，打包出来的 exe 点「排版」时 _read_vendor 抛
+REM   FileNotFoundError，排版视图完全开不出来（Windows 特有，Linux 不受影响）。
+venv\Scripts\pyinstaller --noconfirm --clean StickyNotes.spec
 
 echo.
 echo ============================================================

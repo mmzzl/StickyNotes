@@ -1,0 +1,49 @@
+/* highlight.js atom-one-dark 主题（精简版）
+ *
+ * 来源：highlight.js@11.9.0 styles/atom-one-dark.min.css
+ *
+ * 改动：删掉了原主题的三条“容器盒子”规则——
+ *   pre code.hljs{display:block;overflow-x:auto;padding:1em}
+ *   code.hljs{padding:3px 5px}
+ *   .hljs{color:#abb2bf;background:#282c34}
+ * 因为代码块的背景/内边距由 md_editor.py 的 #editor pre / #editor pre code 统一
+ * 决定（背景 #1e1e1e），让主题再设一遍会打架、还会把内边距叠成两层。
+ * 只保留逐 token 的配色规则。基础正文色用现有代码块的 #f0f0f0（见 md_editor.py），
+ * 未命中任何 token 的字符也能在深色底上看清。 */
+
+.hljs-comment,
+.hljs-quote { color: #5c6370; font-style: italic; }
+.hljs-doctag,
+.hljs-formula,
+.hljs-keyword { color: #c678dd; }
+.hljs-deletion,
+.hljs-name,
+.hljs-section,
+.hljs-selector-tag,
+.hljs-subst { color: #e06c75; }
+.hljs-literal { color: #56b6c2; }
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string,
+.hljs-regexp,
+.hljs-string { color: #98c379; }
+.hljs-attr,
+.hljs-number,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-pseudo,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable { color: #d19a66; }
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-symbol,
+.hljs-title { color: #61aeee; }
+.hljs-built_in,
+.hljs-class .hljs-title,
+.hljs-title.class_ { color: #e6c07b; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+.hljs-link { text-decoration: underline; }

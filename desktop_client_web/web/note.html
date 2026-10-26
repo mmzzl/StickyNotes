@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="editor.css">
+<style>
+/* 贴纸窗专用：圆角、底色、投影都由窗口透明 + 这层卡片提供。
+   底色通过 body 的 data-color 切换，见 note.js 的 applyColor。 */
+html, body { height: 100%; overflow: hidden; }
+body { background: transparent !important; }
+
+#sticker {
+  position: absolute; inset: 8px;
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(60,50,10,0.32);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  background: var(--note-bg, #fff9c4);
+  color: var(--fg, #333);   /* 正文继承：深色便签自动转浅色字 */
+}
+
+/* 标题栏：拖动只在这一条（高度与 gtk_window.DRAG_BAR_HEIGHT 一致） */
+#bar {
+  height: 34px; flex: 0 0 34px;
+  display: flex; align-items: center;
+  padding: 0 8px 0 6px;
+  background: var(--bar-bg, rgba(0,0,0,0.05));
+  cursor: move;
+  user-select: none; -webkit-user-select: none;
+}
+#bar .grip { color: var(--fg-soft, rgba(0,0,0,0.35)); margin-right: 4px; letter-spacing: 1px; }
+#bar .spacer { flex: 1; }
+/* 按钮不参与收缩，避免窗口变窄时被压没 */
+#bar button {
+  border: none; background: transparent; cursor: pointer;
+  flex: 0 0 auto; white-space: nowrap;
+  font-size: 13px; color: var(--fg-soft, rgba(0,0,0,0.6)); padding: 3px 7px;
+  border-radius: 6px; font-family: inherit;
+}
+#bar button:hover {
+  background: var(--btn-hover-bg, rgba(255,255,255,0.9));
+  color: var(--btn-hover-fg, #000);
+}
+#bar #mode { background: var(--btn-hover-bg, rgba(255,255,255,0.6)); color: var(--fg, #333); }
+#bar #mode:hover { background: var(--btn-hover-bg, rgba(255,255,255,0.95)); }
+#bar #del { font-size: 15px; padding: 0 3px; }
+#bar #del:hover { color: #e05a4a; background: transparent; }
+#bar #close { font-size: 16px; padding: 0 3px; }
+
+#title {
+  flex: 0 0 auto;
+  border: none; outline: none; background: transparent;
+  font-size: 16px; font-weight: 700; font-family: inherit;
+  padding: 6px 14px 4px; color: var(--fg, #333);
+}
+
+#editor { flex: 1; overflow-y: auto; }
+/* 源码编辑区：铺满便签剩余高度，去掉右下角拉伸手柄 */
+#source {
+  flex: 1; width: 100%; min-height: 0;
+  resize: none;
+  border: none; outline: none; background: transparent;
+  padding: 4px 14px 12px;
+  font-family: "DejaVu Sans Mono","Consolas","Menlo",monospace;
+  font-size: 13px; line-height: 1.6; color: var(--fg, #333);
+  white-space: pre-wrap; word-wrap: break-word;
+}
+#status {
+  flex: 0 0 auto; height: 18px; font-size: 12px;
+  color: rgba(0,0,0,0.45); padding: 0 14px 6px; text-align: right;
+}
+</style>
+</head>
+<body data-mode="rich">
+<div id="sticker">
+  <div id="bar" class="pywebview-drag-region">
+    <span class="grip pywebview-drag-region">⠿</span>
+    <span class="spacer pywebview-drag-region"></span>
+    <button id="mode" title="切换到 Markdown 源码编辑">源码</button>
+    <button id="save" title="立即保存 (Ctrl+S)">保存</button>
+    <button id="color" title="改便签颜色" style="font-size:17px">●</button>
+    <button id="del" title="删除此便签（不可恢复）">🗑</button>
+    <button id="close" title="收起便签（内容已自动保存）">✕</button>
+  </div>
+  <input id="title" placeholder="标题…" spellcheck="false">
+  <div id="editor" contenteditable="true" spellcheck="false"></div>
+  <textarea id="source" spellcheck="false" style="display:none"></textarea>
+  <div id="status"></div>
+</div>
+
+<script src="highlight.pack.js"></script>
+<script src="marked.min.js"></script>
+<script src="turndown.min.js"></script>
+<script src="turndown-plugin-gfm.min.js"></script>
+<script src="note.js"></script>
+</body>
+</html>

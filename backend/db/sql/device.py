@@ -1,6 +1,6 @@
 """设备示例模型（演示如何新增一个业务实体）。"""
 
-from sqlalchemy import Integer, String
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.sql.base import Base, IdMixin, TimestampMixin

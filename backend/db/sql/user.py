@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.sql.base import Base, IdMixin, TimestampMixin
@@ -19,3 +19,6 @@ class User(Base, IdMixin, TimestampMixin):
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     # 最近一次改密时间（定期强制改密依据；建号/改密/重置时刷新）
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 令牌版本：登出/改密时 +1，令此前签发的 JWT 立即失效
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0")

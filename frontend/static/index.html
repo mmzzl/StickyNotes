@@ -58,6 +58,9 @@
       <div class="brand">📝 <span>我的便签</span></div>
       <input id="search" class="search-box" type="search" placeholder="搜索标题/内容…" autocomplete="off" />
       <div class="top-actions">
+        <button type="button" id="btn-export" class="btn-ghost" title="导出全部便签为 JSON 备份">导出</button>
+        <button type="button" id="btn-import" class="btn-ghost" title="从 JSON 备份追加导入">导入</button>
+        <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
         <button type="button" id="btn-admin" class="btn-ghost hidden">管理后台</button>
         <span class="user-chip" id="user-chip"></span>
         <button type="button" id="btn-logout" class="btn-ghost">退出登录</button>

@@ -1,11 +1,13 @@
-"""自助注册接口测试：注册即登录 + 普通管理员角色（note:list + 后台菜单可用）+ 重名/弱密码拒绝。"""
+"""自助注册接口测试：注册即登录 + 仅授予最小权限角色 + 重名/弱密码拒绝。
+
+安全回归：旧实现注册即绑定 admin 角色，匿名者一次调用即可读管理后台、
+改通知 webhook。现在默认只给 user（note:*），这里把提权路径钉死。
+"""
 from tests.helpers import login_with_captcha
 
 
 async def test_register_ok_and_autologin(client):
-    """注册成功即登录：返回令牌；已分配「普通管理员」角色（note:list + sys:user:list 可用）；真实可登录。"""
-    from repositories import roles
-
+    """注册成功即登录；新用户只有便签权限，不得获得任何系统管理权限。"""
     r = await client.post("/api/v1/auth/register", json={
         "username": "alice", "password": "Abc12345", "display_name": "爱丽丝",
     })
@@ -13,17 +15,19 @@ async def test_register_ok_and_autologin(client):
     data = r.json()["data"]
     assert data.get("access_token") and data.get("refresh_token")
 
-    # 注册即分配「普通管理员」角色：具备便签权限，且浏览器后台可见系统菜单。
-    # 便签 HTTP API 与注册任务并行开发（本任务上游仅 T4），此处以 /auth/me
-    # 的权限/角色码断言同义语义，避免耦合未落地的 note API 路由。
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     me = await client.get("/api/v1/auth/me", headers=headers)
     assert me.status_code == 200, me.text
-    assert "note:list" in me.json()["data"]["permissions"]
-    assert "sys:user:list" in me.json()["data"]["permissions"]  # 普通管理员可见用户管理
-    assert "admin" in me.json()["data"]["roles"]
+    perms = me.json()["data"]["permissions"]
+    assert "note:list" in perms
+    assert "sys:user:list" not in perms
+    assert "sys:notify:update" not in perms
+    assert "user" in me.json()["data"]["roles"]
+    assert "admin" not in me.json()["data"]["roles"]
 
-    assert await roles._find_one({"code": "user"})
+    # 直接打管理后台接口：应被权限依赖挡下，而不是返回用户列表
+    denied = await client.get("/api/v1/sys/users", headers=headers)
+    assert denied.status_code == 403, denied.text
 
     again = await login_with_captcha(client, "alice", "Abc12345")
     assert again.status_code == 200, again.text

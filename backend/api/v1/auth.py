@@ -2,14 +2,13 @@
 
 import secrets
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 
 from config import settings
-from core import security
-from core.dependencies import CurrentUser, CurrentUserDep
+from core import rate_limit, security
+from core.dependencies import CurrentUserDep
 from core.response import ok
 from schemas.auth import ChangePasswordIn, LoginIn, RefreshIn, RegisterIn, UpdateProfileIn, UserInfo
-from schemas.auth import MenuNode
 from services import auth_service
 from repositories import rbac
 
@@ -38,6 +37,8 @@ def _anon_session(request: Request, response: Response) -> str:
 async def get_captcha(request: Request, response: Response):
     from services import captcha_service
 
+    # 验证码会生成图片并写库，匿名可刷，先按 IP 限流
+    rate_limit.check("captcha", _client_ip(request))
     sid = _anon_session(request, response)
     data = await captcha_service.issue_captcha(session_key=sid)
     return ok(data, message="获取验证码成功")
@@ -58,7 +59,11 @@ def _set_session_cookie(response: Response, tokens: dict) -> None:
 
 
 def _client_ip(request: Request) -> str:
-    """取客户端 IP：信任代理头时取 X-Forwarded-For 首个 IP。"""
+    """取客户端 IP。
+
+    默认**不信任** X-Forwarded-For：直连部署时该头可任意伪造，会让账户锁定
+    和接口限流同时失效。确认有可信反向代理会覆盖该头时，再开 LOCK_TRUST_PROXY。
+    """
     if settings.lock_trust_proxy:
         fwd = request.headers.get("x-forwarded-for", "")
         if fwd:
@@ -73,6 +78,7 @@ async def login(body: LoginIn, request: Request, response: Response):
     from services import auth_service as _auth_service
 
     client_ip = _client_ip(request)
+    rate_limit.check("login", client_ip)
 
     # 1. 前置检查：账号/IP 是否已被锁定
     await account_lock_service.ensure_not_locked(body.username, client_ip)
@@ -129,7 +135,13 @@ async def refresh(body: RefreshIn):
 
 
 @router.post("/register", summary="开放注册（注册即登录）")
-async def register(body: RegisterIn):
+async def register(body: RegisterIn, request: Request):
+    if not settings.register_enabled:
+        from core.exceptions import BizError
+
+        raise BizError("注册已关闭，请联系管理员")
+    # 注册会写库且默认即登录，限额比普通接口更严
+    rate_limit.check("register", _client_ip(request), limit=5)
     return ok(await auth_service.register(body), message="注册成功")
 
 

@@ -1,6 +1,10 @@
 [Unit]
-Description=sticky-notes backend service
-After=network.target
+Description=StickyNotes backend service
+After=network-online.target
+Wants=network-online.target
+# 启动异常时限流，避免 Restart=on-failure 每 3 秒无限重启刷屏
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 User=home
@@ -10,10 +14,10 @@ LimitNOFILE=65536
 Type=simple
 # 启动命令
 ExecStart=/data/work/sticky-notes/start.sh start
-# systemctl stop 时，systemd会直接给主进程发信号，也保留你的stop脚本备选
-# ExecStop=/apps/new_apps/sticky-notes/start.sh stop
-# 推荐：让systemd直接管理uvicorn主进程，不用自己写stop脚本
-# 若想使用脚本里的stop逻辑，就启用上面ExecStop
+# Type=simple 会在进程 fork 成功时立刻「算启动完成」，但 uvicorn 要等 lifespan
+# 跑完才监听端口。等 /health 真正可用，消除「start 返回了却连不上」的体感卡顿。
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 100); do curl -fsS http://127.0.0.1:18000/health >/dev/null && exit 0; sleep 0.2; done; exit 1'
+TimeoutStartSec=60
 
 # 进程挂掉自动重启（可选，生产推荐）
 Restart=on-failure

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+    font-size: 14px; color: #333; background: #f4f3ed;
+    height: 100vh; display: flex; flex-direction: column; padding: 18px; gap: 12px;
+  }
+  label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+  input {
+    width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px;
+    font-family: inherit; font-size: 14px; background: #fff; outline: none;
+  }
+  input:focus { border-color: #ffb300; }
+  .srv { display: flex; gap: 8px; align-items: flex-end; }
+  .srv > div { flex: 1; }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    padding: 8px 24px; border-radius: 8px 8px 0 0; background: transparent;
+    cursor: pointer; color: #666; font-family: inherit; font-size: 14px; border: none;
+  }
+  .tab.on { background: #ffd54f; color: #4a3300; font-weight: 700; }
+  .pane {
+    background: #fff; border: 1px solid #ddd; border-radius: 0 8px 8px 8px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1;
+  }
+  .field { display: block; }
+  .cap { display: flex; gap: 8px; align-items: center; }
+  #capimg {
+    width: 150px; height: 52px; background: #eee; border: 1px solid #ddd;
+    border-radius: 6px; cursor: pointer; object-fit: contain;
+  }
+  button.go {
+    background: linear-gradient(135deg, #ffc838, #ffb300); border: none;
+    color: #4a3300; font-weight: 700; padding: 10px 18px; border-radius: 8px;
+    cursor: pointer; font-family: inherit; font-size: 15px;
+  }
+  button.ghost {
+    background: #fff; border: 1px solid #ccc; border-radius: 8px;
+    padding: 7px 14px; cursor: pointer; font-family: inherit;
+  }
+  .err { color: #c0392b; font-size: 13px; min-height: 18px; }
+  .status { color: #2e8b57; font-size: 12px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+  <div class="srv">
+    <div>
+      <label>服务器地址</label>
+      <input id="server" placeholder="http://host:port">
+    </div>
+    <span class="status" id="srvstatus"></span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" data-tab="login">登录</button>
+    <button class="tab" data-tab="register">注册</button>
+  </div>
+
+  <div class="pane" id="pane-login">
+    <label class="field">用户名<input id="user" autocomplete="username"></label>
+    <label class="field">密码<input id="pwd" type="password" autocomplete="current-password"></label>
+    <label class="field">验证码
+      <div class="cap">
+        <img id="capimg" title="点击刷新验证码" alt="验证码">
+        <button class="ghost" id="reload">换一张</button>
+      </div>
+    </label>
+    <input id="captcha" placeholder="验证码" style="margin-top:-6px">
+    <div class="err" id="err-login"></div>
+    <button class="go" id="do-login">登 录</button>
+  </div>
+
+  <div class="pane hide" id="pane-register">
+    <label class="field">用户名<input id="ruser" placeholder="登录用，2~64 位"></label>
+    <label class="field">密码<input id="rpwd" type="password" placeholder="≥8 位，含大小写字母与数字"></label>
+    <label class="field">显示名<input id="rname" placeholder="可选"></label>
+    <div class="err" id="err-register"></div>
+    <button class="go" id="do-register">注册并登录</button>
+  </div>
+
+<script>
+(function () {
+  var api = function () { return window.pywebview && window.pywebview.api; };
+  var captchaId = '';
+
+  function refreshCaptcha() {
+    return api().fetch_captcha().then(function (r) {
+      captchaId = r.captcha_id;
+      document.getElementById('capimg').src = 'data:image/png;base64,' + r.image_base64;
+    }).catch(function (e) {
+      document.getElementById('capimg').alt = '验证码获取失败';
+      document.getElementById('err-login').textContent = String(e);
+    });
+  }
+
+  document.getElementById('capimg').addEventListener('click', refreshCaptcha);
+  document.getElementById('reload').addEventListener('click', refreshCaptcha);
+
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
+    t.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (x) {
+        x.classList.toggle('on', x === t);
+      });
+      document.getElementById('pane-login').classList.toggle('hide', t.dataset.tab !== 'login');
+      document.getElementById('pane-register').classList.toggle('hide', t.dataset.tab !== 'register');
+    });
+  });
+
+  document.getElementById('server').addEventListener('change', function () {
+    api().set_server(this.value).then(function (msg) {
+      document.getElementById('srvstatus').textContent = msg || '';
+      refreshCaptcha();
+    });
+  });
+
+  document.getElementById('do-login').addEventListener('click', function () {
+    var err = document.getElementById('err-login');
+    err.textContent = '';
+    api().login(
+      document.getElementById('user').value,
+      document.getElementById('pwd').value,
+      captchaId,
+      document.getElementById('captcha').value
+    ).then(function (r) {
+      if (r && r.ok === false) { err.textContent = r.error; refreshCaptcha(); }
+    }).catch(function (e) { err.textContent = String(e); refreshCaptcha(); });
+  });
+
+  document.getElementById('do-register').addEventListener('click', function () {
+    var err = document.getElementById('err-register');
+    err.textContent = '';
+    api().register(
+      document.getElementById('ruser').value,
+      document.getElementById('rpwd').value,
+      document.getElementById('rname').value
+    ).then(function (r) {
+      if (r && r.ok === false) { err.textContent = r.error; }
+    }).catch(function (e) { err.textContent = String(e); });
+  });
+
+  window.pywebviewInitLogin = function (baseUrl) {
+    document.getElementById('server').value = baseUrl || '';
+    refreshCaptcha();
+  };
+})();
+</script>
+</body>
+</html>

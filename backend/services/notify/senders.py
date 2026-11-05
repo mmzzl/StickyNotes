@@ -5,6 +5,8 @@
 - 传输层可注入（_http_post/_smtp_send），测试时替换为记录假发送
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import hashlib
@@ -15,17 +17,23 @@ import urllib.parse
 from email.header import Header
 from email.mime.text import MIMEText
 from email.utils import formataddr
-
-import httpx
+from typing import TYPE_CHECKING
 
 from core.exceptions import BizError
 
+if TYPE_CHECKING:
+    # 只在类型检查时可见；运行期仍保持延迟导入，省下启动期约 0.4s 导入链
+    import httpx
+
 
 class _Http:
-    _client: httpx.AsyncClient | None = None
+    # httpx 延迟到第一次真正发通知时才 import
+    _client: "httpx.AsyncClient | None" = None
 
     @classmethod
-    def get(cls) -> httpx.AsyncClient:
+    def get(cls):
+        import httpx
+
         if cls._client is None:
             cls._client = httpx.AsyncClient(timeout=10)
         return cls._client

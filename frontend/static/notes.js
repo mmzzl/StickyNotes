@@ -349,6 +349,37 @@
 
     $('#btn-logout').addEventListener('click', logout);
     $('#btn-new').addEventListener('click', () => createNote().catch(showError));
+
+    /* 备份：导出本人全部便签 / 从备份追加导入 */
+    $('#btn-export').addEventListener('click', async () => {
+      try {
+        const data = await api('GET', '/notes/export');
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sticky-notes-' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (e) { window.alert('导出失败：' + e.message); }
+    });
+    $('#btn-import').addEventListener('click', () => $('#import-file').click());
+    $('#import-file').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        const items = Array.isArray(parsed) ? parsed : (parsed && parsed.notes);
+        if (!Array.isArray(items)) throw new Error('不是有效的便签备份文件');
+        if (window.confirm('将追加导入 ' + items.length + ' 条便签（不会删除现有便签），继续？')) {
+          const r = await api('POST', '/notes/import', { notes: items });
+          window.alert('导入完成：成功 ' + r.imported + ' 条，跳过 ' + r.skipped + ' 条');
+          await refreshDesk();
+        }
+      } catch (err) { window.alert('导入失败：' + err.message); }
+      e.target.value = '';
+    });
     $('#btn-admin').addEventListener('click', () => { window.open('/admin/', '_blank'); });
 
     // 搜索（防抖）与分页

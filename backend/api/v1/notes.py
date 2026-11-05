@@ -1,6 +1,7 @@
 """便签 CRUD 路由。"""
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 
 from core.dependencies import CurrentUserDep, require_permission
 from core.response import ok, paged
@@ -8,6 +9,11 @@ from schemas.note import NoteCreate, NoteUpdate
 from services import note_service
 
 router = APIRouter(prefix="/notes", tags=["便签"])
+
+
+class NotesImportIn(BaseModel):
+    """备份导入载荷；兼容导出文件的 notes 字段。"""
+    notes: list[dict] = Field(default_factory=list, max_length=1000)
 
 
 @router.get("", dependencies=[Depends(require_permission("note:list"))])
@@ -22,6 +28,18 @@ async def list_notes(user: CurrentUserDep,
 @router.post("", dependencies=[Depends(require_permission("note:create"))])
 async def create_note(user: CurrentUserDep, body: NoteCreate):
     return ok(await note_service.create_note(user.id, body.model_dump()))
+
+
+@router.get("/export", dependencies=[Depends(require_permission("note:list"))],
+            summary="导出本人全部便签（JSON 备份）")
+async def export_notes(user: CurrentUserDep):
+    return ok(await note_service.export_notes(user.id))
+
+
+@router.post("/import", dependencies=[Depends(require_permission("note:create"))],
+             summary="从备份追加导入便签")
+async def import_notes(user: CurrentUserDep, body: NotesImportIn):
+    return ok(await note_service.import_notes(user.id, body.notes))
 
 
 @router.put("/{note_id}", dependencies=[Depends(require_permission("note:update"))])

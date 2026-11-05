@@ -78,9 +78,10 @@ class MongoRepository:
         docs = [_doc_to_dict(d) async for d in coll.find(_norm(filters))]
         return docs
 
-    async def _delete_from(self, table_name: str, filters: dict) -> None:
+    async def _delete_from(self, table_name: str, filters: dict) -> int:
         coll = get_collection(table_name)
-        await coll.delete_many(_norm(filters))
+        res = await coll.delete_many(_norm(filters))
+        return res.deleted_count or 0
 
     async def _update_where_one(self, table_name: str, where: dict, data: dict) -> bool:
         """原子条件更新（乐观锁/用后即焚）：仅当 where 满足时更新，返回是否命中。"""

@@ -21,6 +21,13 @@ class SessionRepo(RepoBase):
     async def get_by_token(self, token: str) -> dict | None:
         return await self._find_one({"token": token})
 
+    async def consume_token(self, token: str) -> bool:
+        """原子消费一次性令牌：删除命中则返回 True，重放时返回 False。
+
+        用于 refresh token 轮换（jti 落在 sessions 表），避免「读到再删」的竞态。
+        """
+        return (await self._delete_from("sessions", {"token": token})) > 0
+
     async def delete_by_user(self, user_id: str) -> None:
         await self._delete_from("sessions", {"user_id": user_id})
 

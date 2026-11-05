@@ -8,6 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # backend/ 包所在目录（config.py 所在处）
 BACKEND_DIR = Path(__file__).resolve().parent
 
+# 随源码分发的默认签名密钥：仅便于本地体验，生产必须用 .env 覆盖
+_DEFAULT_JWT_SECRET = "6dace548df771b4a47e6d1fcc1a1d849a21624026ca2c00df0e8201e935ee30c"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -17,15 +20,27 @@ class Settings(BaseSettings):
     )
 
     # 应用基础
-    app_name: str = "安全管控平台模板"
+    app_name: str = "StickyNotes 便签应用"
     api_prefix: str = "/api/v1"
-    debug: bool = True
+    debug: bool = False          # 只控制日志细节/热重载，不再打开全量 SQL 回显
+    echo_sql: bool = False       # 独立开关：仅排查 SQL 时才置 true
+    # 仅供性能对照：true 时回退到「串行初始化 + 全量 seed + SQL 回显」的旧行为
+    startup_legacy: bool = False
+
+    # 运行环境：production 下弱密钥/默认口令直接拒绝启动；development 只告警
+    app_env: str = "development"
+    require_secure_secrets: bool = False
+    # 通知渠道敏感字段的独立加密密钥（与 JWT_SECRET 分离，轮换互不影响）
+    data_encryption_key: str = ""
+
+    # 允许跨域的前端来源（逗号分隔；生产部署请改为实际域名）
+    cors_origins: str = "http://localhost:18000,http://127.0.0.1:18000"
 
     # 认证方式：jwt | session
     auth_mode: str = "jwt"
 
-    # JWT 认证
-    jwt_secret: str = "c4734453d8af8dd19f8c798576b3c28baf9ccf69c9ff075556c8eef3fe5498c4"
+    # JWT 认证（默认值仅便于本地体验，生产必须在 .env 覆盖）
+    jwt_secret: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_access_expire_minutes: int = 30
     jwt_refresh_expire_days: int = 7
@@ -53,7 +68,15 @@ class Settings(BaseSettings):
     login_max_failures: int = 5            # 登录失败次数上限（含验证码错误，共用计数）
     captcha_max_failures: int = 3          # 验证码失败次数上限（与登录共用计数）
     lock_seconds: int = 300                # 命中上限后的锁定时间（秒），0 表示不锁定
-    lock_trust_proxy: bool = True          # 是否信任 X-Forwarded-For 等代理头取真实 IP
+    # 默认不信任代理头：直连部署时伪造 X-Forwarded-For 可绕过 IP 维度锁定。
+    # 仅在确认后端有可信反向代理（会覆盖该头）时才置 true。
+    lock_trust_proxy: bool = False
+
+    # 注册与接口限流
+    register_enabled: bool = True          # 关闭后不再开放自助注册
+    register_default_role: str = "user"    # 新用户默认角色 code；设成 admin 会授予管理权限，生产勿用
+    rate_limit_enabled: bool = True        # 进程内滑动窗口限流（单 worker 部署）
+    rate_limit_per_minute: int = 30        # 单 IP 单接口每分钟上限
 
     # 密码策略（长度/复杂度；登录、自助改密、管理员重置统一校验）
     password_min_length: int = 8                # 最小长度
@@ -84,11 +107,32 @@ class Settings(BaseSettings):
     service_user: str = "admin"
     service_group: str = "admin"
 
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """CORS_ORIGINS 逗号分隔字符串 → 列表（避免 .env 里写 JSON 数组的坑）。"""
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     def is_sqlite(self) -> bool:
         return self.db_backend == "sqlite"
 
     def is_mongodb(self) -> bool:
         return self.db_backend == "mongodb"
+
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() in ("production", "prod")
+
+    def weak_secrets(self) -> list[str]:
+        """返回仍不安全的密钥/口令项，供启动期阻断或告警。"""
+        weak = []
+        if self.auth_mode == "jwt" and (
+            self.jwt_secret == _DEFAULT_JWT_SECRET
+            or self.jwt_secret.startswith("change-me")
+            or len(self.jwt_secret) < 32
+        ):
+            weak.append("JWT_SECRET")
+        if not self.data_encryption_key or len(self.data_encryption_key) < 32:
+            weak.append("DATA_ENCRYPTION_KEY")
+        return weak
 
 
 @lru_cache

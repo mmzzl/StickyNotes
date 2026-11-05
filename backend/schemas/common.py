@@ -1,7 +1,6 @@
 """Pydantic schema 通用约定：分页、时间戳、实体公共字段。"""
 
-from datetime import datetime
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 

@@ -42,6 +42,14 @@ class CaptchaError(BizError):
         super().__init__(message, code=430)
 
 
+class RateLimitedError(BizError):
+    """接口级限流（HTTP 429）：与账户锁定分开，防匿名接口被刷。"""
+
+    def __init__(self, message: str = "请求过于频繁，请稍后再试", retry_after: int | None = None):
+        super().__init__(message, code=429, status_code=429)
+        self.retry_after = retry_after
+
+
 class PasswordExpiredError(BizError):
     """密码超过有效期（HTTP 428）：除改密/登出等豁免接口外，其余业务接口拒绝访问。"""
 

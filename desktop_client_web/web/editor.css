@@ -1,0 +1,86 @@
+
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; background: __NOTE_BG__; }
+body {
+  font-family: "Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+  font-size: 15px; line-height: 1.7; color:var(--fg, #333); padding: 4px 14px 12px;
+  -webkit-font-smoothing: antialiased;
+}
+/* min-height 必须是 0 而不是 100%：100% 相对 #sticker 全高，会把 #bar/#title 顶出可视区，
+   滚动到底时顶部按钮栏消失。flex:1 已经保证它填满剩余空间。 */
+#editor { outline:none; min-height:0; word-wrap:break-word; }
+#editor:empty:before { content:"写点什么…（支持 Markdown）"; color:var(--fg-soft, #999); }
+/* 标题 */
+#editor h1 { font-size:20px; font-weight:700; margin:14px 0 8px; line-height:1.4; }
+#editor h2 { font-size:18px; font-weight:700; margin:12px 0 6px; line-height:1.4; }
+#editor h3 { font-size:16px; font-weight:700; margin:10px 0 5px; }
+#editor h4, #editor h5, #editor h6 { font-size:15px; font-weight:700; margin:9px 0 4px; }
+/* 列表 */
+#editor ul, #editor ol { margin:6px 0; padding-left:24px; }
+#editor li { margin:3px 0; }
+#editor li > ul, #editor li > ol { margin:2px 0; }
+/* 引用 */
+#editor blockquote {
+  margin:8px 0; padding:5px 12px; border-left:3px solid var(--border, rgba(0,0,0,0.22));
+  background:var(--code-bg, rgba(0,0,0,0.045)); color:var(--fg-soft, #555);
+}
+/* 代码 */
+#editor code {
+  font-family:"DejaVu Sans Mono","Consolas","Menlo",monospace; font-size:13px;
+  background:var(--code-bg, rgba(0,0,0,0.07)); padding:1px 5px; border-radius:4px;
+}
+#editor pre {
+  background:#1e1e1e; color:#f0f0f0; padding:10px 12px; border-radius:8px;
+  overflow-x:auto; margin:8px 0; line-height:1.5;
+}
+#editor pre code { background:transparent; color:inherit; padding:0; font-size:13px; }
+/* highlight.js 深色主题（近似 VS Code Dark+），配合 pre 的 #1e1e1e 底色 */
+#editor pre code.hljs { display:block; }
+#editor .hljs-comment, #editor .hljs-quote { color:#6a9955; font-style:italic; }
+#editor .hljs-keyword, #editor .hljs-selector-tag, #editor .hljs-literal,
+#editor .hljs-built_in, #editor .hljs-type { color:#569cd6; }
+#editor .hljs-string, #editor .hljs-doctag, #editor .hljs-regexp { color:#ce9178; }
+#editor .hljs-number, #editor .hljs-symbol, #editor .hljs-bullet { color:#b5cea8; }
+#editor .hljs-title, #editor .hljs-section, #editor .hljs-name,
+#editor .hljs-selector-id, #editor .hljs-selector-class { color:#dcdcaa; }
+#editor .hljs-attr, #editor .hljs-attribute, #editor .hljs-variable,
+#editor .hljs-template-variable { color:#9cdcfe; }
+#editor .hljs-meta, #editor .hljs-meta-keyword { color:#c586c0; }
+#editor .hljs-tag { color:#808080; }
+#editor .hljs-deletion { background:rgba(255,0,0,0.18); }
+#editor .hljs-addition { background:rgba(0,200,80,0.18); }
+#editor .hljs-emphasis { font-style:italic; }
+#editor .hljs-strong { font-weight:700; }
+/* 其它 */
+#editor hr { border:none; border-top:1px solid var(--border, rgba(0,0,0,0.15)); margin:12px 0; }
+#editor a { color:#2f7bbf; }
+#editor table { border-collapse:collapse; margin:8px 0; }
+#editor td, #editor th { border:1px solid var(--border, rgba(0,0,0,0.2)); padding:4px 9px; }
+/* 上下标 / 脚注 */
+#editor sub, #editor sup { font-size:0.75em; line-height:0; }
+#editor sup.fn-ref { line-height:1; }
+#editor sup.fn-ref a { text-decoration:none; font-weight:600; padding:0 1px; }
+#editor .footnotes {
+  margin:10px 0 0; padding:8px 0 0 22px; font-size:12.5px; color:var(--fg-soft, #666);
+  border-top:1px solid var(--border, rgba(0,0,0,0.12));
+}
+#editor .footnotes li { margin:2px 0; }
+#editor .footnotes .fn-back { text-decoration:none; margin-left:2px; color:#1a73a8; }
+/* 任务列表符号 ☐/☑：替代 checkbox，可点击切换 */
+#editor span.task {
+  cursor:pointer; user-select:none; -webkit-user-select:none;
+  color:#3a7d44; font-size:1.05em; margin-right:2px;
+}
+#editor span.task[data-done="0"] { color:var(--fg-soft, rgba(0,0,0,0.45)); }
+#editor span.task:hover { opacity:0.65; }
+/* 选中文本 */
+#editor ::selection { background:#ffd54f; color:#333; }
+/* ---- 滚动条 ----
+   本机 Qt 5.15.3 的 QWebEngineView 直接继承 QWidget（不是 QAbstractScrollArea），
+   没有任何 Qt 滚动条 API，滚动完全交给 Chromium。默认样式是 15px 宽、带上下箭头
+   按钮的浅灰条，在浅色便签上很弱；这里改成无箭头、比例更准的细条。 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.07); }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.34); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.55); }
+::-webkit-scrollbar-corner { background: transparent; }

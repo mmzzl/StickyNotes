@@ -3,9 +3,8 @@
 from sqlalchemy.exc import IntegrityError
 
 from core import security
-from core.exceptions import BizError, NotFoundError, PermissionDeniedError
+from core.exceptions import BizError, NotFoundError
 from repositories import users, roles, permissions, menus
-from core.logger import log
 
 # 内置角色（不可删除/改码，开箱即用）
 BUILTIN_ROLES = {"superadmin", "admin", "readonly"}

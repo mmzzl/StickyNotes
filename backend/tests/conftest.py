@@ -18,6 +18,8 @@ def _test_env(tmp_path_factory):
     settings.db_backend = "sqlite"
     settings.database_url = None  # get_engine 被替换，此值不再使用
     settings.schedule_enabled = False
+    # 用例共用同一个测试客户端 IP，进程内限流会跨用例累积；专门的限流用例自行开启
+    settings.rate_limit_enabled = False
     settings.notify_channels_file = str(tmp_path_factory.mktemp("ch") / "channels.json")
     settings.notify_policy_file = str(tmp_path_factory.mktemp("po") / "policy.json")
     settings.notify_state_file = str(tmp_path_factory.mktemp("st") / "state.json")

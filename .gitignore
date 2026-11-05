@@ -1,8 +1,16 @@
-# 数据文件
+# 数据文件与运行时产物
 data/*.db
 data/*.sqlite
+data/*.db-journal
 data/logs/
+data/*.version
+data/*.json
+# 迁移前的数据库备份 / 迁移演练用临时库（不是源码）
+data/backups/
+data/_*.db
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 *.pyo
@@ -20,5 +28,7 @@ build/
 /StickyNotes.bin.bak-*
 # 整个项目的重复副本（打包/部署时的临时拷贝，不是源码）
 /sticky-notes/
-# agent 运行时元数据
+# agent 运行时元数据（本地会话/记忆，不进版本库）
 .cospowers/
+.workbuddy/
+.claude/

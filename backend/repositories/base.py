@@ -4,7 +4,7 @@
 所有 ID 为 UUID 字符串，时间戳为 datetime（序列化层统一转 ISO 字符串）。
 """
 
-from typing import Any, Protocol
+from typing import Protocol
 
 
 class BaseRepository(Protocol):

@@ -89,8 +89,8 @@ def parse_inputs_conf(path: str | Path) -> list[ScheduleItem]:
             kind = "script"
             # 分离脚本路径与参数
             parts = section[len("script://"):].strip().split(None, 1)
+            # 预留：脚本参数目前不透传给调度器，此处只取脚本路径
             target = "script://" + parts[0]
-            args = parts[1] if len(parts) > 1 else ""
         elif section.startswith("daemon://"):
             kind = "daemon"
         elif section.startswith("task://"):

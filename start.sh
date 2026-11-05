@@ -7,41 +7,48 @@
 # ============================================================
 set -eo pipefail  # 删掉 u，避免无参数时 $1 unbound
 input="${1:-}"   # 给$1赋默认空值，解决unbound variable
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+PORT="${PORT:-18000}"
 
 run() {
-    cd "$(dirname "$0")/backend"
-    # 修复：systemd 以 root 运行时 HOME=/root，导致 Python 找不到用户级安装的 uvicorn
-    # 强制设置 HOME 为实际用户目录，确保 Python 能搜索到 ~/.local/lib/python3.x/site-packages
-    export HOME="/home/home"
-    BIN="/usr/local/bin/uvicorn"
-    #if [ -x ../.venv/bin/uvicorn ]; then
-    #    BIN=../.venv/bin/uvicorn
-    #elif command -v uvicorn >/dev/null 2>&1; then
-    #    BIN=uvicorn
-    #else
-    #    echo "未找到 uvicorn，请先创建虚拟环境并安装依赖：" >&2
-    #    echo "  python3 -m venv ../.venv && ../.venv/bin/pip install -e '..[dev]'" >&2
-    #    exit 1
-    #fi
+    cd "$ROOT/backend"
+    # 优先用项目内虚拟环境，其次 PATH 里的 uvicorn；
+    # 不再硬编码 HOME=/home/home 与 /usr/local/bin/uvicorn（换机器就失效）。
+    if [ -x "$ROOT/.venv/bin/uvicorn" ]; then
+        BIN="$ROOT/.venv/bin/uvicorn"
+    elif [ -x "$ROOT/.venv/Scripts/uvicorn.exe" ]; then
+        BIN="$ROOT/.venv/Scripts/uvicorn.exe"
+    elif command -v uvicorn >/dev/null 2>&1; then
+        BIN="$(command -v uvicorn)"
+    else
+        echo "未找到 uvicorn，请先：python3 -m venv .venv && .venv/bin/pip install -e ." >&2
+        exit 1
+    fi
 
     if [ "$input" = "--dev" ]; then
-        # 开发模式，带reload
-        exec "$BIN" main:app --host 0.0.0.0 --port 18000 --reload
+        # 开发模式，带 reload
+        exec "$BIN" main:app --host 0.0.0.0 --port "$PORT" --reload
     else
         # 生产模式，**不要 --reload**
-        exec "$BIN" main:app --host 0.0.0.0 --port 18000
+        exec "$BIN" main:app --host 0.0.0.0 --port "$PORT"
     fi
 }
 
 stop() {
-    # 查找端口18000的uvicorn进程并杀死
-    pid=$(lsof -t -i:18000)
+    # 兼容没有 lsof 的环境
+    if command -v lsof >/dev/null 2>&1; then
+        pid=$(lsof -t -i:"$PORT" 2>/dev/null || true)
+    elif command -v fuser >/dev/null 2>&1; then
+        pid=$(fuser -n tcp "$PORT" 2>/dev/null || true)
+    else
+        echo "缺少 lsof/fuser，无法自动停止，请手动结束进程" >&2
+        return 1
+    fi
     if [ -n "$pid" ]; then
-        kill $pid
+        kill $pid 2>/dev/null || true
         sleep 1
-        # 强制兜底
-        if lsof -t -i:18000 >/dev/null; then
-            kill -9 $pid
+        if command -v lsof >/dev/null 2>&1 && lsof -t -i:"$PORT" >/dev/null 2>&1; then
+            kill -9 $pid 2>/dev/null || true
         fi
     fi
 }

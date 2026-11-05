@@ -45,6 +45,7 @@ async def get_current_user(request: Request) -> CurrentUser:
     if not token:
         raise AuthError("未登录")
 
+    expected_ver = None
     if settings.auth_mode == "session":
         from datetime import datetime, timezone
 
@@ -65,10 +66,14 @@ async def get_current_user(request: Request) -> CurrentUser:
         try:
             payload = security.decode_token(token, expected_type="access")
             user_id = security._user_id_from_sub(payload["sub"])
+            expected_ver = int(payload.get("ver") or 0)
         except jwt.PyJWTError:
             raise AuthError("令牌无效或已过期")
 
     info = await auth_service.current_user(user_id)
+    # 登出 / 改密会 bump token_version；旧令牌即使没过期也必须拒绝
+    if expected_ver is not None and int(info.get("token_version") or 0) != expected_ver:
+        raise AuthError("令牌已失效，请重新登录")
     return CurrentUser(
         id=info["id"],
         username=info.get("username", ""),

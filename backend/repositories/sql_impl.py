@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import func, select, or_
 
+from core.uow import current_session
 from db.session import sessionmaker
 from db.sql.base import Base
 
@@ -36,9 +37,22 @@ class SqlRepository:
 
     @asynccontextmanager
     async def _session(self):
-        sm = sessionmaker()
-        async with sm() as s:
-            yield s
+        """优先复用 UoW 的 session；独立调用时异常自动 rollback。"""
+        outer = current_session()
+        if outer is not None:
+            yield outer
+            return
+        async with sessionmaker()() as s:
+            try:
+                yield s
+            except BaseException:
+                await s.rollback()
+                raise
+
+    async def _commit(self, s) -> None:
+        """只在没有外层 UoW 时提交，避免多步写被中途切开。"""
+        if current_session() is None:
+            await s.commit()
 
     # ---------------- 通用查询助手（供实体自定义查询使用，跨 DB 语义一致） ----------------
 
@@ -94,10 +108,11 @@ class SqlRepository:
             rows = (await s.execute(stmt)).all()
             return [dict(r._mapping) for r in rows]
 
-    async def _delete_from(self, table_name: str, filters: dict) -> None:
+    async def _delete_from(self, table_name: str, filters: dict) -> int:
+        """删除并返回命中行数：调用方可用返回值做原子「消费一次」判定。"""
         table = Base.metadata.tables.get(table_name)
         if table is None:
-            return
+            return 0
         from sqlalchemy import delete
 
         async with self._session() as s:
@@ -105,8 +120,9 @@ class SqlRepository:
             for k, v in filters.items():
                 if v not in (None, ""):
                     stmt = stmt.where(table.c[k] == v)
-            await s.execute(stmt)
-            await s.commit()
+            res = await s.execute(stmt)
+            await self._commit(s)
+            return res.rowcount or 0
 
     async def _update_where_one(self, table_name: str, where: dict, data: dict) -> bool:
         """原子条件更新：仅当 where 全部满足时更新，返回是否命中（乐观锁/用后即焚用）。"""
@@ -120,7 +136,7 @@ class SqlRepository:
                 *(table.c[k] == v for k, v in where.items() if v not in (None, ""))
             ).values(**data)
             res = await s.execute(stmt)
-            await s.commit()
+            await self._commit(s)
             return (res.rowcount or 0) > 0
 
     async def _insert_from(self, table_name: str, rows: list[dict]) -> None:
@@ -129,7 +145,7 @@ class SqlRepository:
             return
         async with self._session() as s:
             await s.execute(table.insert(), rows)
-            await s.commit()
+            await self._commit(s)
 
     async def _upsert_increment(self, table_name: str, filters: dict, inc_field: str) -> None:
         """数据库层原子「不存在则建(计数=1) + 存在则计数+1」。
@@ -150,7 +166,7 @@ class SqlRepository:
         )
         async with self._session() as s:
             await s.execute(stmt)
-            await s.commit()
+            await self._commit(s)
 
     # ---------------- 标准 CRUD ----------------
 
@@ -160,7 +176,7 @@ class SqlRepository:
             self._assign(obj, data)
             s.add(obj)
             await s.flush()   # 触发 DML（唯一约束冲突在 flush 时抛出，供上层捕获）
-            await s.commit()
+            await self._commit(s)
             # expire_on_commit=False，属性仍在；不 refresh，避免并发共享连接下 refresh 失败
             return _model_to_dict(obj)
 
@@ -212,8 +228,11 @@ class SqlRepository:
             if not obj:
                 return None
             self._assign(obj, data)
-            await s.commit()
-            await s.refresh(obj)
+            await self._commit(s)
+            # 处在 UoW 时不能 refresh：未提交的修改会被数据库旧值覆盖，
+            # 导致「改密返回成功但新密码登不进去」。属性本身已是最新值。
+            if current_session() is None:
+                await s.refresh(obj)
             return _model_to_dict(obj)
 
     async def delete(self, id: str) -> bool:
@@ -222,7 +241,7 @@ class SqlRepository:
             if not obj:
                 return False
             await s.delete(obj)
-            await s.commit()
+            await self._commit(s)
             return True
 
     async def count(self, filters: dict | None = None) -> int:

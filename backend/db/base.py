@@ -17,7 +17,8 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         _engine = create_async_engine(
             settings.database_url,
-            echo=settings.debug,
+            # 与 debug 解耦：默认不回显 SQL；STARTUP_LEGACY 对照模式除外
+            echo=settings.echo_sql or settings.startup_legacy,
             pool_pre_ping=True,
         )
         log.info("SQLAlchemy 引擎已创建: {}", settings.database_url)

@@ -48,10 +48,12 @@ def _user_id_from_sub(sub: str) -> str:
 # JWT 模式
 # ---------------------------------------------------------------
 
-def create_access_token(user_id: str, extra: dict | None = None) -> str:
+def create_access_token(user_id: str, token_version: int = 0,
+                        extra: dict | None = None) -> str:
     payload = {
         "sub": _sub_from_user(user_id),
         "type": "access",
+        "ver": int(token_version),   # 与 users.token_version 比对，支持即时吊销
         "iat": _now(),
         "exp": _now() + timedelta(minutes=settings.jwt_access_expire_minutes),
     }
@@ -60,10 +62,12 @@ def create_access_token(user_id: str, extra: dict | None = None) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, token_version: int = 0) -> str:
     payload = {
         "sub": _sub_from_user(user_id),
         "type": "refresh",
+        "ver": int(token_version),
+        "jti": secrets.token_urlsafe(16),  # 一次性：落库后轮换时原子消费
         "iat": _now(),
         "exp": _now() + timedelta(days=settings.jwt_refresh_expire_days),
     }
@@ -97,11 +101,23 @@ def session_cookie_max_age() -> int:
 # 通知渠道敏感字段落盘加密（AES-GCM）
 # ---------------------------------------------------------------
 
-def _secret_key() -> bytes:
+def _secret_keys() -> list[bytes]:
+    """加密密钥候选：优先独立配置，末位是历史派生值（保证旧密文仍可解）。
+
+    旧实现直接用 sha256(JWT_SECRET) 当 AES 密钥，轮换签名密钥会让历史
+    SMTP 密码 / 机器人 secret 全部解不开。现在签名与加密可独立轮换，
+    解密时依次尝试，实现平滑迁移。
+    """
     import hashlib
 
-    raw = (settings.jwt_secret or "insecure-default-notify-key").encode()
-    return hashlib.sha256(raw).digest()
+    keys: list[bytes] = []
+    if settings.data_encryption_key:
+        keys.append(hashlib.sha256(settings.data_encryption_key.encode()).digest())
+    legacy = hashlib.sha256(
+        (settings.jwt_secret or "insecure-default-notify-key").encode()).digest()
+    if legacy not in keys:
+        keys.append(legacy)
+    return keys
 
 
 def encrypt_secret(plaintext: str) -> str:
@@ -114,7 +130,7 @@ def encrypt_secret(plaintext: str) -> str:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     nonce = os.urandom(12)
-    ct = AESGCM(_secret_key()).encrypt(nonce, plaintext.encode(), None)
+    ct = AESGCM(_secret_keys()[0]).encrypt(nonce, plaintext.encode(), None)
     return base64.urlsafe_b64encode(nonce + ct).decode()
 
 
@@ -123,7 +139,15 @@ def decrypt_secret(token: str) -> str:
         return ""
     import base64
 
+    from cryptography.exceptions import InvalidTag
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     raw = base64.urlsafe_b64decode(token.encode())
-    return AESGCM(_secret_key()).decrypt(raw[:12], raw[12:], None).decode()
+    keys = _secret_keys()
+    for i, key in enumerate(keys):
+        try:
+            return AESGCM(key).decrypt(raw[:12], raw[12:], None).decode()
+        except (InvalidTag, ValueError):
+            if i == len(keys) - 1:
+                raise
+    return ""

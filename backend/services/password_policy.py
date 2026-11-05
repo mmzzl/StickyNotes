@@ -7,12 +7,13 @@
 """
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from config import settings
 from core import security
 from core.exceptions import BizError, PasswordExpiredError
 from core.logger import log
+from core.uow import unit_of_work
 from repositories import users, password_history
 
 
@@ -91,24 +92,31 @@ async def apply_password(user: dict, new_password: str) -> None:
         raise BizError("新密码不能与当前密码相同")
     if await is_reusing_history(user["id"], new_password):
         raise BizError(f"新密码不能与最近 {settings.password_history_count} 次使用的密码相同")
+    from repositories import sessions
+
     new_hash = security.hash_password(new_password)
     now = _now()
-    await users.update(user["id"], {"password_hash": new_hash, "password_changed_at": now})
-    if settings.password_history_count > 0:
-        await password_history.add(user["id"], new_hash)
-        await password_history.trim(user["id"], settings.password_history_count)
-    if settings.auth_mode == "session":
-        from repositories import sessions
-
+    # token_version +1 会立即使此前签发的 access/refresh 全部失效；
+    # 与哈希更新放在同一次写、同一个事务里，避免改密后旧令牌仍有窗口期。
+    new_ver = int(user.get("token_version") or 0) + 1
+    async with unit_of_work():
+        await users.update(user["id"], {
+            "password_hash": new_hash,
+            "password_changed_at": now,
+            "token_version": new_ver,
+        })
+        if settings.password_history_count > 0:
+            await password_history.add(user["id"], new_hash)
+            await password_history.trim(user["id"], settings.password_history_count)
+        # session 模式吊销会话；jwt 模式清掉未消费的 refresh 记录
         await sessions.delete_by_user(user["id"])
-        log.info("密码已修改并吊销旧会话: user_id={}", user["id"])
-    else:
-        log.info("密码已修改: user_id={}", user["id"])
+    log.info("密码已修改，已吊销旧令牌与会话: user_id={} ver={}", user["id"], new_ver)
 
 
 async def note_initial_password(user_id: str, password_hash: str) -> None:
     """建号时记录改密时间与初始密码历史（定期改密/防重用从建号起生效）。"""
-    await users.update(user_id, {"password_changed_at": _now()})
-    if settings.password_history_count > 0:
-        await password_history.add(user_id, password_hash)
-        await password_history.trim(user_id, settings.password_history_count)
+    async with unit_of_work():
+        await users.update(user_id, {"password_changed_at": _now()})
+        if settings.password_history_count > 0:
+            await password_history.add(user_id, password_hash)
+            await password_history.trim(user_id, settings.password_history_count)

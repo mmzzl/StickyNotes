@@ -19,6 +19,8 @@
 
 ### 后端
 
+需要 Python 3.10+（Linux 上 `deploy/install.sh` 会自动挑选满足版本的解释器）。
+
 ```bash
 pip install -r requirements.txt   # 唯一依赖清单；backend/requirements.txt 只是兼容引用
 cd backend
@@ -27,13 +29,25 @@ python -m uvicorn main:app --host 0.0.0.0 --port 18000
 
 打开 `http://127.0.0.1:18000/` 用 Web 便签，`/admin/` 是管理后台，`/health` 是健康检查，`/docs` 是接口文档。首次启动自动按版本迁移建库并写种子数据，之后每次启动由版本表 + 种子指纹闸门跳过重复初始化；改造前就存在的老库会自动纳管，不重建表、不丢数据。
 
-Linux 生产部署：
+Linux 生产部署（需要 systemd 与 **Python 3.10+**）：
+
+| 发行版 | 说明 |
+|---|---|
+| Ubuntu 22.04+ / Debian 12+ | 自带 python3 ≥ 3.10，直接装 `python3-venv python3-dev curl` |
+| RHEL 9 / CentOS Stream 9 / Rocky 9 / Alma 9 | 默认 `python3` 是 3.9，需 `dnf install python3.11 python3.11-pip`，脚本会自动挑 3.11 |
+| CentOS 7 / 8 | 已 EOL，Python 版本也过低，不建议；请升级系统或改用容器 |
 
 ```bash
+# 系统依赖（脚本会先检查版本来挑解释器，缺什么直接打印对应命令）
+#   Ubuntu / Debian : sudo apt-get install -y python3 python3-venv python3-dev curl
+#   RHEL / CentOS   : sudo dnf install -y python3.11 python3.11-pip curl
 sudo bash deploy/install.sh /opt/sticky-notes
 systemctl status sticky-notes
 journalctl -u sticky-notes -f
+systemctl list-timers sticky-notes-backup.timer   # 每日备份定时器
 ```
+
+`install.sh` 会自动装好 `sticky-notes-backup.service` + `.timer`（每天 03:30，关机错过后开机补跑），并立即生成首份备份；卸载用 `deploy/uninstall.sh`，会一并移除定时器。
 
 或直接 `./start.sh start` / `./start.sh stop` / `./start.sh --dev`（热重载）；端口可用 `PORT` 环境变量覆盖。
 
@@ -146,6 +160,8 @@ ruff check backend desktop_client_web --select F   # 致命规则静态检查
 
 `desktop_client/tests` 需要 PyQt5 环境，用该目录自带的 venv 单独运行；两个桌面目录都叫 `tests`，合并收集会包名冲突，故 `pyproject.toml` 的 `testpaths` 只收后端。CI 见 `.github/workflows/ci.yml`（Python 3.11 / 3.12：lint + 后端测试 + 桌面逻辑测试）。
 
+`test_deploy_artifacts.py` 静态校验 `deploy/` 与 `scripts/` 的引用关系（systemd unit 指向的脚本是否存在、`install.sh` 是否注册 timer、两种发行版族的依赖提示是否都在），避免只在 Linux 上才暴露的部署脱节。
+
 依赖清单以 `pyproject.toml` 为真源，`requirements.txt` 与之对齐，`backend/requirements.txt` 只是 `-r ../requirements.txt` 的兼容引用。
 
 ## 数据库迁移
@@ -195,7 +211,7 @@ alembic downgrade 0001_baseline    # 谨慎：会执行基线逆操作，生产�
 |---|---|---|
 | 服务内调度 | 每天 03:10 | `backend/conf/inputs.conf` 的 `[task://db_backup:daily_backup]`，失败会走 `task_failed` 通知 |
 | 启动补做 | 服务启动、就绪之后 | 距上次成功超过 `BACKUP_CATCHUP_HOURS`（默认 26h）时后台线程补做，不阻塞 `/health`、不计入启动耗时 |
-| 独立 CLI | 计划任务 / cron | 服务没开也能跑，见下 |
+| 独立 CLI | Windows 计划任务 / Linux systemd timer / cron | 服务没开也能跑，见下 |
 
 命令行（不需要服务运行）：
 
@@ -217,11 +233,23 @@ schtasks /Query /TN "StickyNotesDbBackup" /V /FO LIST
 schtasks /Delete /TN "StickyNotesDbBackup" /F
 ```
 
-Linux 部署用 cron（时间与 03:10 的服务内调度错开，重复执行会被当天幂等跳过）：
+Linux（systemd，推荐；`deploy/install.sh` 已自动安装并启用）：
+
+```bash
+systemctl list-timers sticky-notes-backup.timer   # 下次执行时间
+sudo systemctl start sticky-notes-backup.service  # 立刻备份一次
+journalctl -u sticky-notes-backup -n 50           # 备份日志
+```
+
+unit 源文件是 `deploy/backup.service` / `deploy/backup.timer`：`OnCalendar=*-*-* 03:30:00`、`Persistent=true`（关机错过开机补跑）、`RandomizedDelaySec=300`（多实例打散）。安装时 `install.sh` 会把 `User` / `Group` / 路径占位替换成实际值，与主服务用同一运行用户，避免备份文件或锁文件归属不一致。
+
+没有 systemd 的环境（容器、老系统）用 cron，时间与 03:10 错开，重复执行会被当天幂等跳过：
 
 ```cron
-30 3 * * * cd /opt/sticky-notes && ./.venv/bin/python scripts/backup_db.py --once
+30 3 * * * cd /opt/sticky-notes && ./scripts/backup_daily.sh
 ```
+
+`backup_daily.sh` 会优先用 `.venv/bin/python`、退回系统 `python3`。cron 建议用服务运行用户（如 `sudo -u admin crontab -e`）：root 创建的备份文件与 `.backup.lock` 可能让服务用户无法删除，脚本会明确报「陈旧锁无法清理（权限不足）」而不是静默卡死。
 
 `GET /health` 的 `backup` 字段给出 `last_success_at / last_file / last_size / count / last_error / total_success / total_failed`，可直接做监控告警（例如 `last_success_at` 超过 48 小时）。
 

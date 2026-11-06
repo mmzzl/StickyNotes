@@ -143,8 +143,10 @@ def _process_lock(directory: Path, timeout: float = 30.0, stale_seconds: float =
             if age > stale_seconds:
                 try:
                     lock.unlink()
-                except OSError:
-                    pass
+                except OSError as e:
+                    # 锁文件属于别的用户（如 cron 用 root、服务用 admin）时删不掉，
+                    # 继续空转只会白等到超时，这里直接给出可诊断的错误。
+                    raise TimeoutError(f"陈旧锁无法清理（权限不足？）: {lock} ({e})") from e
                 continue
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"备份锁被占用超过 {timeout:.0f}s: {lock}")

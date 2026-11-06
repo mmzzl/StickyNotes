@@ -1,0 +1,15 @@
+[Unit]
+Description=StickyNotes SQLite daily backup
+Documentation=file:///data/work/sticky-notes/README.md
+After=network.target
+
+[Service]
+Type=oneshot
+# 与服务进程同一用户，保证对 data/ 与 data/backups/ 的读写权限一致
+User=home
+Group=home
+WorkingDirectory=/data/work/sticky-notes
+# 与服务内 03:10 的调度错开；当天已成功备份会幂等跳过，不会产生两份
+ExecStart=/data/work/sticky-notes/.venv/bin/python /data/work/sticky-notes/scripts/backup_db.py --once
+Nice=10
+IOSchedulingClass=idle

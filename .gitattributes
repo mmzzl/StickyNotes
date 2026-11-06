@@ -1,0 +1,17 @@
+# 统一换行：git 索引里始终存 LF，检出时按下面的规则还原
+* text=auto
+/.gitattributes text eol=lf
+
+# Linux 下直接执行的脚本与 systemd unit 必须是 LF。
+# 带 CRLF 会报 “bad interpreter: /usr/bin/env^M”，unit 的 ExecStart 也会带上 ^M
+# 导致路径解析失败——这是 Windows 上编辑后传到 Linux 最常见的坑。
+*.sh      text eol=lf
+*.service text eol=lf
+*.timer   text eol=lf
+
+# CI（ubuntu-latest）与容器里执行的配置同样按 LF
+*.yml     text eol=lf
+*.yaml    text eol=lf
+
+# Windows 批处理保留 CRLF
+*.bat     text eol=crlf

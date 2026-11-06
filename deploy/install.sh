@@ -22,12 +22,15 @@ echo "==> 安装到 $INSTALL_DIR"
 # 1. 拷贝代码
 # alembic.ini + migrations/ 是运行时必需：启动时会按版本同步表结构，缺了服务起不来。
 # start.sh 也必须拷贝——notes.service 的 ExecStart 指向它。
+# scripts/ 是独立备份 CLI，cron / 计划任务会调用，服务没开也能用。
 # requirements.txt 供不使用 PEP 517 的排障/离线安装场景，backend/requirements.txt 会引用它。
 mkdir -p "$INSTALL_DIR"
-cp -r "$SRC_DIR/backend" "$SRC_DIR/frontend" "$SRC_DIR/migrations" "$INSTALL_DIR/"
+cp -r "$SRC_DIR/backend" "$SRC_DIR/frontend" "$SRC_DIR/migrations" \
+      "$SRC_DIR/scripts" "$INSTALL_DIR/"
 cp "$SRC_DIR/pyproject.toml" "$SRC_DIR/alembic.ini" "$SRC_DIR/start.sh" \
    "$SRC_DIR/requirements.txt" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/start.sh"
+chmod +x "$INSTALL_DIR/scripts/backup_db.py"
 cp "$SERVICE_FILE" /etc/systemd/system/${APP_NAME}.service
 
 # 2. 创建运行用户（默认 admin/admin，按 /etc/passwd 判断）
@@ -50,7 +53,7 @@ python3 -m venv "$INSTALL_DIR/.venv" || exit 1
 "$INSTALL_DIR/.venv/bin/pip" install -e "$INSTALL_DIR"
 
 # 5. 目录权限（数据目录需可写）
-mkdir -p "$INSTALL_DIR/data"
+mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/data/backups"
 chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR"
 chown -R "$RUN_USER:$RUN_GROUP" "$INSTALL_DIR/data"
 

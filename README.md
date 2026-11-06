@@ -113,7 +113,7 @@ curl http://127.0.0.1:18000/health                             # startup_ms / st
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/health` | 健康检查 + 启动耗时 + seed 状态（不鉴权） |
+| GET | `/health` | 健康检查 + 启动耗时 + seed 状态 + 最近备份状态（不鉴权） |
 | POST | `/api/v1/auth/register` | 开放注册，注册即登录 |
 | POST | `/api/v1/auth/login` | 登录（含图形验证码） |
 | GET/POST | `/api/v1/notes` | 便签列表（支持 `q/page/page_size`）/ 新建 |
@@ -183,6 +183,60 @@ alembic downgrade 0001_baseline    # 谨慎：会执行基线逆操作，生产�
 
 `alembic.ini` 必须保持纯 ASCII：alembic 用 `encoding="locale"` 读它，中文 Windows 的 GBK 会直接解码失败。URL 不在 ini 里，由 `migrations/env.py` 与 `db/migration.py` 共用的 `sync_database_url()` 注入，把 `sqlite+aiosqlite` 换成同步 `sqlite` 驱动。SQLite 保持单 worker，避免多进程同时抢迁移锁；多实例滚动升级请先在网关侧摘流量。
 
+## 数据库备份
+
+每天自动备份 `data/app.db`，无需停服。核心是 `sqlite3.Connection.backup()` 生成**一致性快照**：WAL 模式下最新提交可能还留在 `-wal` 文件里，直接复制主库文件会得到缺数据甚至损坏的副本，所以这里绝不复制文件。备份完成后会跑 `PRAGMA integrity_check`，并逐表比对源库与快照的行数，通过才原子落盘。
+
+产物在 `data/backups/app.db-YYYYMMDD-HHMMSS.db`，流水在 `data/backups/backup.log`，状态在 `data/backups/backup_state.json`。自动清理超过 `BACKUP_RETENTION_DAYS`（默认 30 天）的文件，但永远保留最近 `BACKUP_MIN_KEEP`（默认 7 份）；清理只认本模块的命名格式，`app.db.pre-alembic-*` 这类人工备份不会被误删。
+
+三条触发路径，互为保险：
+
+| 路径 | 时机 | 说明 |
+|---|---|---|
+| 服务内调度 | 每天 03:10 | `backend/conf/inputs.conf` 的 `[task://db_backup:daily_backup]`，失败会走 `task_failed` 通知 |
+| 启动补做 | 服务启动、就绪之后 | 距上次成功超过 `BACKUP_CATCHUP_HOURS`（默认 26h）时后台线程补做，不阻塞 `/health`、不计入启动耗时 |
+| 独立 CLI | 计划任务 / cron | 服务没开也能跑，见下 |
+
+命令行（不需要服务运行）：
+
+```bash
+python scripts/backup_db.py --once                 # 备份（当天已成功则跳过）
+python scripts/backup_db.py --force                # 强制再生成一份
+python scripts/backup_db.py --list                 # 列出全部备份及大小
+python scripts/backup_db.py --verify               # 校验最新一份
+python scripts/backup_db.py --verify app.db-20261106-031000.db
+python scripts/backup_db.py --status               # 最近成功时间、累计次数、是否欠账
+```
+
+Windows 计划任务（当前用户，无需管理员，服务关着也执行；入口 `scripts/backup_daily.bat` 用 `pythonw` 静默运行，结果写进 `backup.log`）：
+
+```bat
+schtasks /Create /TN "StickyNotesDbBackup" /SC DAILY /ST 03:30 /F ^
+  /TR "\"C:\Users\User\Downloads\StickyNotes\scripts\backup_daily.bat\""
+schtasks /Query /TN "StickyNotesDbBackup" /V /FO LIST
+schtasks /Delete /TN "StickyNotesDbBackup" /F
+```
+
+Linux 部署用 cron（时间与 03:10 的服务内调度错开，重复执行会被当天幂等跳过）：
+
+```cron
+30 3 * * * cd /opt/sticky-notes && ./.venv/bin/python scripts/backup_db.py --once
+```
+
+`GET /health` 的 `backup` 字段给出 `last_success_at / last_file / last_size / count / last_error / total_success / total_failed`，可直接做监控告警（例如 `last_success_at` 超过 48 小时）。
+
+**恢复**：备份是某一时刻的快照，恢复会丢掉之后写入的数据，动手前先留一份当前库。
+
+```bash
+# 1. 停服务（systemctl stop sticky-notes / 关闭 uvicorn）
+# 2. 把当前 data/app.db 及残留的 app.db-wal、app.db-shm 整体另存，便于回退
+# 3. 选一份备份校验：python scripts/backup_db.py --verify <文件名>
+# 4. 复制成 data/app.db，并删除残留的 app.db-wal / app.db-shm
+# 5. 启动服务，看 GET /health 的 ready 与 backup 字段
+```
+
+`DB_BACKEND=mongodb` 时备份自动跳过（Mongo 请用 `mongodump`）；`BACKUP_ENABLED=false` 可整体关闭。
+
 ## 公开部署前的安全清单
 
 - 生成两个不同的随机密钥写入 `.env`：`JWT_SECRET`、`DATA_ENCRYPTION_KEY`；设 `APP_ENV=production`（弱密钥会拒绝启动）
@@ -190,7 +244,7 @@ alembic downgrade 0001_baseline    # 谨慎：会执行基线逆操作，生产�
 - `DEBUG=false`、`ECHO_SQL=false`；`CORS_ORIGINS` 改成实际域名，不要用 `*`
 - `CAPTCHA_ENABLED=true`、`RATE_LIMIT_ENABLED=true`、`LOCK_SECONDS` 保持开启
 - 只有确认可信反向代理会**覆盖** `X-Forwarded-For` 时才设 `LOCK_TRUST_PROXY=true`
-- 数据目录 `data/` 权限收紧（含 `app.db`、日志、seed 指纹文件）
+- 数据目录 `data/` 权限收紧（含 `app.db`、日志、seed 指纹文件、`backups/`）；重要数据再把备份异地归档一份，同盘备份挡不住磁盘故障
 - SQLite 场景保持单 worker，避免定时任务重复执行与写锁竞争
 
 ## 文档

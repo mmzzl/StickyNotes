@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     mongo_uri: str = "mongodb://localhost:27017"
     mongo_db: str = "app_template"
 
+    # 每日数据库备份（SQLite 在线一致性备份，见 db/backup.py）
+    backup_enabled: bool = True
+    backup_dir: str = str(BACKEND_DIR.parent / "data" / "backups")
+    backup_state_file: str = str(BACKEND_DIR.parent / "data" / "backups" / "backup_state.json")
+    backup_retention_days: int = 30      # 超过 N 天的备份自动清理
+    backup_min_keep: int = 7            # 无论多旧，至少保留最近 N 份
+    backup_catchup_hours: int = 26      # 启动时距上次成功超过 N 小时则后台补做
+
     # 验证码（登录防爆破）
     captcha_enabled: bool = True           # 是否启用验证码
     captcha_length: int = 4                # 字符个数

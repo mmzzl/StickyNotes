@@ -4,6 +4,7 @@
 用于运维就绪探测与量化启动优化效果。
 """
 
+import threading
 from contextlib import asynccontextmanager
 
 # 必须尽量靠前导入：覆盖后续全部第三方库 import + create_app() 的耗时
@@ -53,6 +54,9 @@ async def lifespan(app: FastAPI):
     log.info("服务就绪 | 启动总耗时 {} ms | 阶段明细 {}", snap["startup_ms"], snap["stages_ms"])
     log.info("健康检查: GET /health")
 
+    # 就绪之后再补做备份：不把 I/O 计入启动耗时，也不阻塞健康检查
+    _schedule_backup_catchup()
+
     yield
 
     if settings.schedule_enabled:
@@ -94,8 +98,37 @@ def _shutdown_scheduler() -> None:
     shutdown_scheduler()
 
 
+def _schedule_backup_catchup() -> None:
+    """距上次成功备份过久（或从未备份）时，后台线程补做一次。
+
+    机器关机错过 03:10 的定时任务是很常见的情况，只靠 cron 会整天没有备份。
+    用 daemon 线程执行：不占事件循环、不计入启动耗时、服务关闭不影响退出。
+    """
+    if not (settings.backup_enabled and settings.schedule_enabled
+            and settings.is_sqlite() and settings.database_url):
+        return
+
+    def _run() -> None:
+        from db.backup import backup_database, needs_catchup
+
+        try:
+            if not needs_catchup():
+                return
+            r = backup_database(reason="startup-catchup")
+            if r.get("skipped"):
+                log.info("启动备份补做跳过（{}）", r.get("reason"))
+            else:
+                log.info("启动备份补做完成: {} ({} bytes, {}ms)",
+                         r["file"], r["size"], r["duration_ms"])
+        except Exception:
+            log.exception("启动备份补做失败（不影响服务可用）")
+
+    threading.Thread(target=_run, name="db-backup-catchup", daemon=True).start()
+
+
 def _health() -> dict:
     """健康检查 + 启动耗时报告；不鉴权、不受密码到期网关影响。"""
+    from db.backup import status_summary
     from db.seed import get_seed_stats
 
     data = report()
@@ -105,6 +138,7 @@ def _health() -> dict:
         "auth_mode": settings.auth_mode,
         "db_backend": settings.db_backend,
         "seed": get_seed_stats(),
+        "backup": status_summary(),
     })
     return ok(data)
 

@@ -1,6 +1,7 @@
 """配置与令牌持久化（与 PyQt5 版共用同一份文件，两个客户端可互相读）。"""
 import json
 import os
+import tempfile
 from pathlib import Path
 
 DEFAULT_BASE_URL = "http://10.74.64.100:18000"
@@ -38,14 +39,28 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
+    """原子写入：多个客户端实例共用这份 config.json，直接 write_text
+    可能让另一个进程读到写了一半的 JSON，从而被误判为「未登录」。
+    先写同目录临时文件再 os.replace，读到的永远是完整内容。
+    """
     d = config_dir()
     d.mkdir(parents=True, exist_ok=True)
     f = d / "config.json"
-    f.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    fd, tmp = tempfile.mkstemp(prefix="config-", suffix=".tmp", dir=str(d))
     try:
-        os.chmod(f, 0o600)
-    except OSError:
-        pass
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            json.dump(cfg, fp, ensure_ascii=False, indent=2)
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp, f)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def load_view_modes() -> dict:

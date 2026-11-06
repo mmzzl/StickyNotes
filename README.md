@@ -47,6 +47,8 @@ python app.py
 
 `dist/StickyNotesWeb.exe` 是打包好的 Windows 单文件版。服务端地址默认写在 `config.py` 的 `DEFAULT_BASE_URL`，登录框里也能改，或编辑 `~/.config/sticky_notes/config.json` 的 `base_url`。
 
+**登录态会自动续期**：access 只有 30 分钟，但客户端在它快过期时静默调用 `/auth/refresh`，万一仍收到 401 也会自动续期并重放原请求，上层无感。每次刷新会换到一份新的 7 天 refresh，所以只要 7 天内打开过一次就不会再要求登录。只有 refresh 真正失效（超过 7 天没用、在别处登出/改密）才回登录窗，并弹一次提示。多开客户端共用 `config.json` 时会互相采用已换好的令牌，不会因 refresh 一次性轮换而互相踢下线；配置文件改为原子写入，避免并发写坏 JSON。服务端暂时连不上不会清空登录态。
+
 便签桌的「恢复便签」最多同时打开 8 张（每张是一个独立 WebView 进程，一次全开会卡），其余在列表里双击按需打开；「备份 / 导入」走后端 `/notes/export`、`/notes/import`。
 
 > 另有 `desktop_client/`（PyQt5 版），功能相近，按需选用。`frontend/static/` 是浏览器版，`desktop_client_web/web/` 是贴纸客户端内嵌页面，改功能时注意别改错目录。
@@ -132,14 +134,14 @@ curl http://127.0.0.1:18000/health                             # startup_ms / st
 | 事务边界 | `core/uow.py`：注册、改密、角色/权限绑定等多步写共用同一事务，异常整体 rollback；独立调用 repository 时行为不变且失败自动回滚 | — |
 | 密钥分离 | `DATA_ENCRYPTION_KEY` 独立加密通知渠道密码，与 JWT 签名密钥解耦；解密按「新密钥 → 旧派生」回退，升级不丢历史密文 | `APP_ENV=production` 时弱密钥**拒绝启动** |
 
-> 行为变化：登出 / 改密后旧令牌立即失效（401）；每个 refresh token 只能用一次。桌面 web 客户端运行中遇到 401 会记录日志（刻意不做窗口热切换），重启客户端即可用新令牌重新登录；启动时的令牌探测失败会自动回到登录窗。
+> 行为变化：登出 / 改密后旧令牌立即失效（401）；每个 refresh token 只能用一次。桌面贴纸客户端会自动用 refresh 续期并重放 401 请求，所以正常使用时不会再被踢回登录框（见「桌面贴纸客户端」）。只有 refresh 本身失效才会回登录窗；窗口不做热切换，重启客户端即显示登录框。
 
 ## 测试与工程化
 
 ```bash
 pytest backend/tests -q                 # 后端全量（含安全加固回归）
-pytest desktop_client_web/tests -q     # 桌面 web 版纯逻辑用例
-ruff check backend --select F          # 致命规则静态检查
+pytest desktop_client_web/tests -q     # 桌面 web 版逻辑 + 令牌自动续期回归
+ruff check backend desktop_client_web --select F   # 致命规则静态检查
 ```
 
 `desktop_client/tests` 需要 PyQt5 环境，用该目录自带的 venv 单独运行；两个桌面目录都叫 `tests`，合并收集会包名冲突，故 `pyproject.toml` 的 `testpaths` 只收后端。CI 见 `.github/workflows/ci.yml`（Python 3.11 / 3.12：lint + 后端测试 + 桌面逻辑测试）。

@@ -17,6 +17,7 @@
 """
 import os
 import sys
+import threading
 
 from sticky_log import get_logger, log_path, setup_logging
 
@@ -51,15 +52,23 @@ def main() -> int:
     log.info("启动 pid=%d 日志=%s 便签服务=%s GUI=pywebview",
              os.getpid(), log_path(), client.base_url)
 
-    if client.access_token:
+    # 启动自检：access 过期/快过期时先用 refresh 静默续期，再探一次后端。
+    # 只有「明确鉴权失效」才回登录；服务暂时连不上时保留登录态，
+    # 免得每次断网/服务重启都被误踢回登录框。
+    logged_in = False
+    if client.access_token or client.refresh_token:
         try:
+            client.ensure_session()
             client.list_notes()
-            log.info("令牌有效，直接进便签桌")
+            logged_in = bool(client.access_token) and not client.auth_invalid
+            if logged_in:
+                log.info("会话有效，直接进便签桌%s",
+                         "（已自动续期）" if client.renewed_this_session else "")
         except Exception as e:  # noqa: BLE001
-            log.info("令牌失效（%s），转登录", e)
-            client.access_token = ""
-
-    logged_in = bool(client.access_token)
+            log.warning("启动自检未通过：%s", e)
+            logged_in = bool(client.access_token) and not client.auth_invalid
+    if not logged_in:
+        log.info("需要登录（刷新令牌不可用或已失效）")
 
     # 无论是否要登录，都在主线程先建便签桌窗口。未登录时隐藏，作为 master 常驻，
     # 避免登录窗销毁后出现「零窗口」让 pywebview 直接结束进程。
@@ -76,17 +85,37 @@ def main() -> int:
 
 
 def _bind_auth_failed(client, desk):
-    """会话过期时返回登录（简版：提示后退出到登录流程，不做热切换）。
+    """刷新令牌也失效时（长期未使用 / 别处登出或改密）提示重新登录。
 
-    Qt 版会在 401 时静默关掉所有便签窗再弹登录框。pywebview 里窗口生命周期
-    由 GUI 循环托管，热切换容易留下半销毁的窗口，这里选择更保守的做法：
-    记日志并由用户重新启动。后续如需热切换再单独实现。
+    绝大多数 401 已被 api.Client 的自动续期吃掉，走到这里属于真·失效。
+    pywebview 里热切换窗口容易留下半销毁的窗口（见模块开头说明），
+    所以不在这里 create_window，只提示一次：重启客户端即会显示登录窗。
     """
     def on_auth_failed():
-        log.warning("会话已过期(401)，请重新登录")
+        log.warning("会话已失效，下次启动客户端会显示登录窗口")
+        _notify_relogin()
 
     client.on_auth_failed = on_auth_failed
     desk.session_expired = on_auth_failed
+
+
+def _notify_relogin():
+    """Windows 下弹一次非阻塞提示。exe 是 console=False，日志用户看不见。"""
+    if sys.platform != "win32":
+        return
+
+    def show():
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(
+                0, "登录已过期，请重新登录。\n\n"
+                   "关闭客户端后重新打开，会自动显示登录窗口。",
+                "便签 - 登录已过期", 0x40)
+        except Exception:  # noqa: BLE001
+            pass
+
+    threading.Thread(target=show, daemon=True).start()
 
 
 def _gui():

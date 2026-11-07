@@ -80,7 +80,11 @@ class Client:
         self._renewed_at = 0.0
 
     def set_base_url(self, url):
-        """切换服务器地址：换新会话（验证码 cookie 独立）并持久化。"""
+        """切换服务器地址：换新会话（验证码 cookie 独立）并持久化。
+
+        旧地址的令牌在新地址上必然无效，必须一并清掉；同时把「会话失效」
+        标记复位，否则刚改完地址点登录也会被 auth_invalid 挡住自动续期。
+        """
         url = (url or DEFAULT_BASE_URL).strip().rstrip("/")
         if not url.startswith(("http://", "https://")):
             url = "http://" + url
@@ -88,9 +92,15 @@ class Client:
         self.session = requests.Session()
         self.clear_tokens()
         self.username = ""
+        with self._auth_lock:
+            self.auth_invalid = False
+            self._notified = False
+            self._renewed_at = 0.0
         cfg = load_config()
         cfg.update(base_url=url, username="")
         save_config(cfg)
+        log.info("服务器地址已切换为 %s（已清除旧登录态）", url)
+        return url
 
     def clear_tokens(self):
         """只清令牌，保留服务器地址与上次用户名，登录页体验更顺。"""
@@ -99,6 +109,30 @@ class Client:
         cfg = load_config()
         cfg.update(access_token="", refresh_token="")
         save_config(cfg)
+
+    def logout(self):
+        """退出登录：尽力通知服务端吊销令牌，**无条件**清空本地登录态。
+
+        刻意不走 _request()：它会先做自动续期，并在 401 时触发
+        _handle_auth_failed 弹「会话已失效」提示。主动登出时这些都不该发生，
+        尤其服务器地址已经改错、根本连不上的时候，也必须能把账号退干净。
+        """
+        try:
+            self.session.post(
+                self._url("/auth/logout"), json={},
+                headers=self._headers(), timeout=3, verify=False)
+        except Exception as e:  # noqa: BLE001
+            log.info("服务端登出未成功（本地登录态仍会清除）：%s", e)
+        self.clear_tokens()
+        with self._auth_lock:
+            self.auth_invalid = False
+            self._notified = False
+            self._renewed_at = 0.0
+        self.username = ""
+        cfg = load_config()
+        cfg.update(username="")
+        save_config(cfg)
+        log.info("已退出登录")
 
     # ---- 基础请求 ----
     def _headers(self):

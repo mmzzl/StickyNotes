@@ -45,6 +45,9 @@
   .err { color: #c0392b; font-size: 13px; min-height: 18px; }
   .status { color: #2e8b57; font-size: 12px; }
   .hide { display: none; }
+  .reason { color: #8a6d1f; font-size: 12px; background: #fff6dc;
+            border-radius: 6px; padding: 7px 10px; }
+  .foot { display: flex; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -55,6 +58,7 @@
     </div>
     <span class="status" id="srvstatus"></span>
   </div>
+  <div class="reason hide" id="reason"></div>
 
   <div class="tabs">
     <button class="tab on" data-tab="login">登录</button>
@@ -83,10 +87,29 @@
     <button class="go" id="do-register">注册并登录</button>
   </div>
 
+  <div class="foot">
+    <button class="ghost hide" id="cancel">返回便签桌</button>
+  </div>
+
 <script>
 (function () {
   var api = function () { return window.pywebview && window.pywebview.api; };
   var captchaId = '';
+  var booted = false;
+
+  // 兜底：登录窗是「隐藏预建」的，某些 pywebview 后端可能不发 loaded 事件，
+  // 那样 pywebviewInitLogin 不会被调用，页面就会是空表单 + 没有验证码。
+  // 所以页面自己也拉一次当前服务器地址与验证码；两边都跑也无害（只是多换一张图）。
+  function boot() {
+    if (booted) return;
+    if (!window.pywebview || !window.pywebview.api) { setTimeout(boot, 100); return; }
+    booted = true;
+    api().current_server().then(function (u) {
+      if (u) document.getElementById('server').value = u;
+    }).catch(function () {});
+    refreshCaptcha();
+  }
+  setTimeout(boot, 60);
 
   function refreshCaptcha() {
     return api().fetch_captcha().then(function (r) {
@@ -115,7 +138,13 @@
     api().set_server(this.value).then(function (msg) {
       document.getElementById('srvstatus').textContent = msg || '';
       refreshCaptcha();
+    }).catch(function (e) {
+      document.getElementById('srvstatus').textContent = String(e);
     });
+  });
+
+  document.getElementById('cancel').addEventListener('click', function () {
+    api().cancel();
   });
 
   document.getElementById('do-login').addEventListener('click', function () {
@@ -143,8 +172,25 @@
     }).catch(function (e) { err.textContent = String(e); });
   });
 
-  window.pywebviewInitLogin = function (baseUrl) {
+  // 每次打开都重置表单：带上最新服务器地址，清掉上一次的密码和报错。
+  // canCancel 只在「切换账号」时为 true；已退出登录时不能返回原会话。
+  window.pywebviewInitLogin = function (baseUrl, canCancel, reason) {
+    booted = true;
     document.getElementById('server').value = baseUrl || '';
+    document.getElementById('user').value = '';
+    document.getElementById('pwd').value = '';
+    document.getElementById('captcha').value = '';
+    document.getElementById('ruser').value = '';
+    document.getElementById('rpwd').value = '';
+    document.getElementById('rname').value = '';
+    document.getElementById('err-login').textContent = '';
+    document.getElementById('err-register').textContent = '';
+    document.getElementById('srvstatus').textContent = '';
+    document.getElementById('cancel').classList.toggle('hide', !canCancel);
+    var r = document.getElementById('reason');
+    r.textContent = reason || '';
+    r.classList.toggle('hide', !reason);
+    captchaId = '';
     refreshCaptcha();
   };
 })();

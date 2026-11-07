@@ -11,9 +11,11 @@
   ``signal only works in main thread of the main interpreter``；异常被吞成一条
   日志，此时一个窗口都不剩，pywebview 主循环返回、进程静默退出，表现就是
   「登录后窗口不见了，进程也找不着」。
-- 现在的做法：没有令牌时先把便签桌窗口**隐藏**建好（它就是 master），再建
-  登录窗；登录成功回调只负责 show 这个已存在的窗口，绝不在子线程里
-  create_window。登录窗销毁后 master 仍在，主循环不会退出。
+- 现在的做法：先把便签桌窗口**隐藏**建好（它就是 master），再建登录窗；
+  登录成功回调只负责 show 这个已存在的窗口，绝不在子线程里 create_window。
+- 两个窗口都**始终预建、只 show/hide、不销毁**。以前只在未登录时建登录窗，
+  自动续期上线后令牌长期有效，用户就再也回不到登录页，换服务器地址 /
+  切换账号 / 退出登录都没了入口。登录时把登录窗隐藏即可，需要时再 show。
 """
 import os
 import sys
@@ -73,27 +75,42 @@ def main() -> int:
     # 无论是否要登录，都在主线程先建便签桌窗口。未登录时隐藏，作为 master 常驻，
     # 避免登录窗销毁后出现「零窗口」让 pywebview 直接结束进程。
     desk = Desk(client, hidden=not logged_in, start_tray=logged_in)
+
+    # 登录窗也**始终**预建：已登录时隐藏，需要改服务器/切换账号/退出登录时
+    # 直接 show 复用。以前只在「未登录」时建，自动续期后令牌长期有效，就再也
+    # 回不到登录页了 —— 换设备地址、退出账号全都没有入口。
+    dlg = LoginDialog(client, desk=desk, hidden=logged_in)
+    dlg.on_success = desk.activate
+    desk.set_login_dialog(dlg)
     _bind_auth_failed(client, desk)
 
     if not logged_in:
-        dlg = LoginDialog(client)
-        dlg.on_success = desk.activate
-        log.info("等待登录（便签桌窗口已预建并隐藏）")
+        log.info("等待登录（便签桌与登录窗均已在主线程预建）")
+    else:
+        log.info("直接进入便签桌（登录窗已隐藏，可随时从「账号」菜单打开）")
 
     _start_webview()
     return 0
 
 
 def _bind_auth_failed(client, desk):
-    """刷新令牌也失效时（长期未使用 / 别处登出或改密）提示重新登录。
+    """刷新令牌也失效时（长期未使用 / 别处登出或改密）切回登录窗。
 
     绝大多数 401 已被 api.Client 的自动续期吃掉，走到这里属于真·失效。
-    pywebview 里热切换窗口容易留下半销毁的窗口（见模块开头说明），
-    所以不在这里 create_window，只提示一次：重启客户端即会显示登录窗。
+    登录窗是主线程预建并复用的，所以这里可以安全地 show 它，不必再让用户
+    「关掉客户端重开」；仍不 create_window，避免 winforms 的 signal 问题。
     """
     def on_auth_failed():
-        log.warning("会话已失效，下次启动客户端会显示登录窗口")
-        _notify_relogin()
+        log.warning("会话已失效，切回登录窗口")
+        if desk.login_dialog is None:
+            _notify_relogin()
+            return
+        try:
+            desk.enter_logged_out("登录已过期，请重新登录")
+            desk.show_login(cancelable=False, reason="登录已过期，请重新登录")
+        except Exception:  # noqa: BLE001
+            log.exception("切回登录窗失败")
+            _notify_relogin()
 
     client.on_auth_failed = on_auth_failed
     desk.session_expired = on_auth_failed

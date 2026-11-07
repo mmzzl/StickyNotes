@@ -89,6 +89,12 @@ def create_tray(desk):
     def restore_all(_icon=None, _item=None):
         _call(desk.restore_all)
 
+    def show_login(_icon=None, _item=None):
+        _call(lambda: desk.show_login(cancelable=True))
+
+    def logout(_icon=None, _item=None):
+        _call(desk.logout)
+
     def quit_app(_icon=None, _item=None):
         _call(desk.quit_app)
 
@@ -99,7 +105,10 @@ def create_tray(desk):
             pystray.MenuItem("新建便签", new_note),
             pystray.MenuItem("恢复全部便签", restore_all),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("退出", quit_app),
+            pystray.MenuItem("切换账号 / 服务器", show_login),
+            pystray.MenuItem("退出登录", logout),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("退出程序", quit_app),
         )
         icon = pystray.Icon("sticky_notes", image, "便签", menu)
         threading.Thread(target=icon.run, daemon=True).start()

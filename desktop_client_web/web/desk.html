@@ -10,20 +10,22 @@
     display: flex; flex-direction: column;
   }
   header {
-    flex: 0 0 58px; display: flex; align-items: center; gap: 10px;
-    padding: 0 16px; background: #fbf9f2; border-bottom: 1px solid #e6e2d2;
+    flex: 0 0 58px; display: flex; align-items: center; gap: 8px;
+    padding: 0 14px; background: #fbf9f2; border-bottom: 1px solid #e6e2d2;
+    position: relative;
   }
   .brand { font-size: 19px; font-weight: 700; color: #57450a; }
-  .user { color: #907c3a; font-size: 13px; }
+  .user { color: #907c3a; font-size: 12px; max-width: 260px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .spacer { flex: 1; }
   button {
-    font-family: inherit; font-size: 14px; cursor: pointer;
-    background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 7px 16px;
+    font-family: inherit; font-size: 13px; cursor: pointer;
+    background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 7px 12px;
   }
   button:hover { border-color: #ffb300; color: #a87700; }
   button.primary {
     background: linear-gradient(135deg, #ffc838, #ffb300);
-    border: none; color: #4a3300; font-weight: 700; padding: 9px 20px; font-size: 15px;
+    border: none; color: #4a3300; font-weight: 700; padding: 9px 16px; font-size: 14px;
   }
   .row { display: flex; gap: 8px; align-items: center; padding: 8px 12px 0; }
   input[type=search], input[type=text] {
@@ -43,6 +45,27 @@
   .item .p { color: #888; font-size: 12px; margin-top: 3px;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .empty { color: #999; text-align: center; padding: 40px 0; }
+  .notice { color: #8a6d1f; line-height: 1.8; }
+  .notice button { margin-top: 10px; }
+  .err { color: #c0392b; }
+
+  /* 账号下拉：位置相对 header，避免被 #list 的滚动容器裁掉 */
+  .menu-wrap { position: relative; }
+  .menu {
+    position: absolute; right: 0; top: 46px; width: 292px; z-index: 20;
+    background: #fff; border: 1px solid #e2ddc9; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(80, 60, 10, .18); padding: 12px;
+  }
+  .menu.hide { display: none; }
+  .menu-title { font-size: 12px; color: #888; margin-bottom: 6px; }
+  .menu-row { display: flex; gap: 6px; }
+  .menu-row input { min-width: 0; font-size: 12px; padding: 6px 8px; }
+  .menu-row button { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .menu-note { font-size: 11px; color: #aaa; margin: 6px 0 10px; }
+  .menu hr { border: none; border-top: 1px solid #eee; margin: 8px 0; }
+  .menu-item { display: block; width: 100%; text-align: left; border: none;
+               background: transparent; padding: 8px 6px; border-radius: 6px; }
+  .menu-item:hover { background: #fff6dc; color: #8a6d1f; }
 </style>
 </head>
 <body>
@@ -54,7 +77,21 @@
     <button id="backup" title="导出全部便签为 JSON 备份">备份</button>
     <button id="restore-backup" title="从 JSON 备份追加导入">导入</button>
     <button id="new" class="primary">＋ 新建便签</button>
-    <button id="quit">退出</button>
+    <div class="menu-wrap">
+      <button id="account" title="账号与服务器设置">账号 ▾</button>
+      <div class="menu hide" id="account-menu">
+        <div class="menu-title">服务器地址（换设备 / 换 IP 在这里改）</div>
+        <div class="menu-row">
+          <input type="text" id="srv" placeholder="http://host:port">
+          <button id="srv-save">保存</button>
+        </div>
+        <div class="menu-note">修改后旧登录态会清除，需重新登录</div>
+        <hr>
+        <button class="menu-item" id="switch">切换账号 / 重新登录</button>
+        <button class="menu-item" id="logout">退出登录</button>
+        <button class="menu-item" id="quit">退出程序</button>
+      </div>
+    </div>
   </header>
   <div class="row">
     <input type="search" id="q" placeholder="搜索标题/内容（回车）">
@@ -64,8 +101,9 @@
   <div id="list"></div>
 <script>
 (function () {
-  var items = [], page = 1, q = '', total = 0, loaded = 0;
+  var items = [], page = 1, q = '', total = 0, loaded = 0, loggedOut = false;
   var api = function () { return window.pywebview && window.pywebview.api; };
+  var $ = function (id) { return document.getElementById(id); };
 
   function itemLabel(n) { return (n.title || '').trim() || '(无标题)'; }
   function preview(n) {
@@ -73,8 +111,28 @@
     return c ? c.slice(0, 80) : '（空便签）';
   }
 
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function bindNoticeButtons() {
+    var b = $('go-login');
+    if (b) b.addEventListener('click', function () { api().show_login(true); });
+  }
+
+  function renderLoggedOut(msg) {
+    $('count').textContent = '';
+    $('more').style.display = 'none';
+    $('list').innerHTML = '<div class="empty notice">' + esc(msg) +
+      '<br><button id="go-login">登录 / 切换账号</button></div>';
+    bindNoticeButtons();
+  }
+
   function render() {
-    var list = document.getElementById('list');
+    if (loggedOut) { renderLoggedOut(window._loggedOutMsg || '当前未登录'); return; }
+    var list = $('list');
     if (!items.length) {
       list.innerHTML = '<div class="empty">还没有便签，点右上角「＋ 新建便签」贴一张</div>';
     } else {
@@ -88,66 +146,112 @@
         el.addEventListener('click', function () { open(el.dataset.id); });
       });
     }
-    document.getElementById('count').textContent =
-      total ? ('显示 ' + loaded + ' / 共 ' + total + ' 条') : '';
-    document.getElementById('more').style.display = total > loaded ? '' : 'none';
-  }
-
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
+    $('count').textContent = total ? ('显示 ' + loaded + ' / 共 ' + total + ' 条') : '';
+    $('more').style.display = total > loaded ? '' : 'none';
   }
 
   function load(reset) {
+    if (loggedOut) return Promise.resolve();
     if (reset) { page = 1; items = []; }
     return api().list_notes(q, page, 200).then(function (r) {
       items = reset ? r.items : items.concat(r.items);
       loaded = items.length; total = r.total;
       render();
     }).catch(function (e) {
-      document.getElementById('list').innerHTML =
-        '<div class="empty">加载失败：' + esc(e) + '</div>';
+      // 服务器换了地址 / 没启动时，这里必须给出可点的入口，否则就「回不去登录页」了
+      $('count').textContent = '';
+      $('list').innerHTML = '<div class="empty notice err">加载失败：' + esc(e) +
+        '<br><span class="notice">服务器地址可能已变更，或未启动。</span>' +
+        '<br><button id="go-login">切换服务器 / 重新登录</button></div>';
+      bindNoticeButtons();
     });
   }
 
   function open(id) { api().open_note(id); }
 
+  function loadSettings() {
+    return api().get_settings().then(function (s) {
+      if (!s) return;
+      $('srv').value = s.base_url || '';
+      if (s.active) {
+        $('user').textContent = '当前用户：' + (s.username || '-') +
+                                (s.base_url ? ' @ ' + s.base_url : '');
+      }
+    }).catch(function () {});
+  }
+
   window.pywebviewSetUser = function (name) {
-    document.getElementById('user').textContent = '当前用户：' + (name || '-');
+    $('user').textContent = '当前用户：' + (name || '-');
   };
   window.pywebviewRefresh = function () { load(true); };
 
-  document.getElementById('new').addEventListener('click', function () {
-    q = ''; document.getElementById('q').value = '';
+  // 未登录 / 已退出：列表区变成明确的登录入口，窗口不会「消失」
+  window.pywebviewLoggedOut = function (msg) {
+    loggedOut = true;
+    window._loggedOutMsg = msg || '当前未登录，可切换账号或修改服务器地址';
+    items = []; total = 0; loaded = 0;
+    $('user').textContent = '未登录';
+    render();
+    loadSettings();
+  };
+
+  window.pywebviewStart = function (username, baseUrl) {
+    loggedOut = false;
+    $('user').textContent = '当前用户：' + (username || '-') +
+                            (baseUrl ? ' @ ' + baseUrl : '');
+    $('srv').value = baseUrl || '';
+    load(true);
+  };
+
+  // ---- 账号菜单 ----
+  $('account').addEventListener('click', function (e) {
+    e.stopPropagation();
+    $('account-menu').classList.toggle('hide');
+  });
+  document.addEventListener('click', function (e) {
+    if (!$('account-menu').contains(e.target) && e.target !== $('account')) {
+      $('account-menu').classList.add('hide');
+    }
+  });
+  $('srv-save').addEventListener('click', function () {
+    api().set_server($('srv').value).then(function (msg) {
+      if (msg) { window.alert(msg); return; }
+      $('account-menu').classList.add('hide');
+      loadSettings();
+    }).catch(function (e) { window.alert(String(e)); });
+  });
+  $('switch').addEventListener('click', function () {
+    $('account-menu').classList.add('hide');
+    api().show_login(true);
+  });
+  $('logout').addEventListener('click', function () {
+    $('account-menu').classList.add('hide');
+    api().logout();
+  });
+  $('quit').addEventListener('click', function () { api().quit_app(); });
+
+  $('new').addEventListener('click', function () {
+    q = ''; $('q').value = '';
     api().new_note().then(function () { load(true); });
   });
-  document.getElementById('restore').addEventListener('click', function () {
+  $('restore').addEventListener('click', function () {
     api().restore_all().then(function (msg) {
       if (msg) window.alert(msg);
       load(true);
     });
   });
-  document.getElementById('backup').addEventListener('click', function () {
+  $('backup').addEventListener('click', function () {
     api().export_backup().then(function (msg) { if (msg) window.alert(msg); });
   });
-  document.getElementById('restore-backup').addEventListener('click', function () {
+  $('restore-backup').addEventListener('click', function () {
     api().import_backup().then(function (msg) {
       if (msg) { window.alert(msg); load(true); }
     });
   });
-  document.getElementById('quit').addEventListener('click', function () { api().quit_app(); });
-  document.getElementById('more').addEventListener('click', function () {
-    page += 1; load(false);
-  });
-  document.getElementById('q').addEventListener('keydown', function (e) {
+  $('more').addEventListener('click', function () { page += 1; load(false); });
+  $('q').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { q = this.value.trim(); load(true); }
   });
-
-  window.pywebviewStart = function (username) {
-    window.pywebviewSetUser(username);
-    load(true);
-  };
 })();
 </script>
 </body>

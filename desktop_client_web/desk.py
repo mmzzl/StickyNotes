@@ -60,6 +60,26 @@ class DeskApi:
         self._d.quit_app()
         return ""
 
+    # ---- 账号：改服务器 / 切换 / 退出登录 ----
+    def get_settings(self):
+        c = self._d.client
+        return {"username": c.username or "", "base_url": c.base_url,
+                "active": bool(self._d.active)}
+
+    def set_server(self, url):
+        """从便签桌直接改服务器地址（服务器连不上时也能改）。"""
+        return self._d.set_server(url)
+
+    def show_login(self, cancelable=True):
+        """打开登录窗。cancelable=True 只是切换账号，不动现有令牌。"""
+        self._d.show_login(cancelable=cancelable)
+        return ""
+
+    def logout(self):
+        """真正退出账号：令牌清空 + 便签桌转未登录态 + 弹登录窗。"""
+        self._d.logout()
+        return ""
+
 
 class Desk:
     def __init__(self, client, hidden=False, start_tray=True):
@@ -74,6 +94,8 @@ class Desk:
         self._items = {}           # note_id -> note dict（列表缓存）
         self._lock = threading.Lock()
         self.active = not hidden   # 是否已完成登录、可以正常访问后端
+        self.login_dialog = None   # 由 app 挂上预建的登录窗（长期复用）
+        self.logged_out_msg = "当前未登录，可切换账号或修改服务器地址"
 
         self.api = DeskApi(self)
         self.window = webview.create_window(
@@ -102,18 +124,20 @@ class Desk:
             self.tray = tray_mod.create_tray(self)
         try:
             self.window.evaluate_js(
-                "window.pywebviewStart(%s)" % _js(self.client.username or ""))
+                "window.pywebviewStart(%s, %s)" % (
+                    _js(self.client.username or ""), _js(self.client.base_url)))
         except Exception as e:  # noqa: BLE001
             log.warning("便签桌初始化失败：%s", e)
         self.refresh_desk()
-        log.info("便签桌已激活 用户=%s", self.client.username)
+        log.info("便签桌已激活 用户=%s 服务器=%s", self.client.username, self.client.base_url)
 
     def _on_loaded(self):
         if not self.active:
             return                 # 隐藏预建窗口：未登录，不初始化页面也不请求
         try:
             self.window.evaluate_js(
-                "window.pywebviewStart(%s)" % _js(self.client.username or ""))
+                "window.pywebviewStart(%s, %s)" % (
+                    _js(self.client.username or ""), _js(self.client.base_url)))
         except Exception as e:  # noqa: BLE001
             log.warning("便签桌初始化失败：%s", e)
 
@@ -123,6 +147,72 @@ class Desk:
             self.window.hide()
             return False
         return True
+
+    # ---- 登录态切换（登录窗全程复用，不新建窗口） ----
+    def set_login_dialog(self, dlg):
+        self.login_dialog = dlg
+        dlg.on_close = self.on_login_closed
+
+    def show_login(self, cancelable=True, reason=""):
+        """显示预建的登录窗；便签桌先退到后台，避免两个窗口抢焦点。"""
+        dlg = self.login_dialog
+        if dlg is None:
+            log.warning("登录窗未预建，无法切换账号")
+            return
+        self.window.hide()
+        dlg.show(cancelable=cancelable, reason=reason)
+        log.info("打开登录窗 可取消=%s", cancelable)
+
+    def on_login_closed(self):
+        """登录窗被关掉：把便签桌显示回来，绝不留「零可见窗口」的隐形进程。"""
+        self.window.show()
+        if not self.active:
+            self._render_logged_out()
+        else:
+            self.refresh_desk()
+
+    def enter_logged_out(self, msg=""):
+        """便签桌转为未登录态：不再打后端、清空列表，给出明确的登录入口。"""
+        self.active = False
+        self.logged_out_msg = msg or "当前未登录，可切换账号或修改服务器地址"
+        self._close_note_windows()
+        with self._lock:
+            self._items.clear()
+        self._render_logged_out()
+        log.info("便签桌转为未登录态：%s", self.logged_out_msg)
+
+    def _render_logged_out(self):
+        try:
+            self.window.evaluate_js(
+                "window.pywebviewLoggedOut && window.pywebviewLoggedOut(%s)"
+                % _js(self.logged_out_msg))
+        except Exception as e:  # noqa: BLE001
+            log.warning("渲染未登录态失败：%s", e)
+
+    def _close_note_windows(self):
+        for w in list(self.windows.values()):
+            try:
+                w.request_close()
+            except Exception as e:  # noqa: BLE001
+                log.warning("关闭便签窗失败：%s", e)
+        self.windows.clear()
+
+    def set_server(self, url):
+        """从便签桌改服务器地址：清旧令牌 + 转未登录态 + 打开登录窗。"""
+        url = (url or "").strip()
+        if not url:
+            return "服务器地址不能为空"
+        new_url = self.client.set_base_url(url)
+        self.enter_logged_out("服务器地址已改为 %s，请重新登录" % new_url)
+        self.show_login(cancelable=False, reason="服务器地址已更改，请重新登录")
+        return ""
+
+    def logout(self):
+        """退出登录：能连上服务端就吊销令牌，连不上也照常清本地登录态。"""
+        self.client.logout()
+        self.enter_logged_out("已退出登录，可切换账号或修改服务器地址")
+        self.show_login(cancelable=False, reason="已退出登录，请重新登录")
+        log.info("已退出登录并打开登录窗")
 
     # ---- 数据 ----
     def fetch(self, q="", page=1, page_size=PAGE_SIZE):
@@ -285,6 +375,10 @@ class Desk:
                 w.request_close()
             except Exception as e:  # noqa: BLE001
                 log.warning("关闭便签窗失败：%s", e)
+        # 登录窗是常驻的隐藏窗口，不一起销毁会留下「零可见窗口但消息循环还在」
+        # 的隐形进程（pywebview 按窗口数判断何时退出）。
+        if self.login_dialog is not None:
+            self.login_dialog.destroy()
         try:
             self.window.destroy()
         except Exception as e:  # noqa: BLE001

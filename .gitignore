@@ -32,3 +32,11 @@ build/
 .cospowers/
 .workbuddy/
 .claude/
+# 原生客户端的本地编译产物（dist/ 已由上面的全局规则忽略；部署用的是
+# /usr/local/bin/StickyNotes.bin，不依赖仓库里的二进制）
+/desktop_client_native/sticky-notes-native
+/desktop_client_native/sticky-notes-native.bin
+# 桌面快捷方式等改动的临时备份
+*.bak-*
+# GNOME/GIO 回收站目录
+.Trash-0/

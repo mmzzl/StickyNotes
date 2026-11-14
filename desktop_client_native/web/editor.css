@@ -1,0 +1,89 @@
+/* 便签正文编辑器（mygo WebView 内）。
+   页面底色不再走透明：WebKitGTK 在透明页面里滚动会丢帧、刷白块（见
+   editor.go newEditor 的说明），所以 Go 侧把便签色经 URL 参数 ?c= 在首帧
+   就铺成 html/body 的实底，改色经 __setColor 更新。这里的 html/body 规则
+   只覆盖"参数没带上"的兜底瞬间，代码块、行内代码等自行带不透明底色。 */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: transparent; }
+body {
+  font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 15px; line-height: 1.7; color: #333; padding: 4px 14px 12px;
+  -webkit-font-smoothing: antialiased;
+}
+#editor { outline: none; min-height: 24px; word-wrap: break-word; }
+#editor:empty:before { content: "写点什么…（支持 Markdown）"; color: #999; }
+/* 标题 */
+#editor h1 { font-size: 20px; font-weight: 700; margin: 14px 0 8px; line-height: 1.4; }
+#editor h2 { font-size: 18px; font-weight: 700; margin: 12px 0 6px; line-height: 1.4; }
+#editor h3 { font-size: 16px; font-weight: 700; margin: 10px 0 5px; }
+#editor h4, #editor h5, #editor h6 { font-size: 15px; font-weight: 700; margin: 9px 0 4px; }
+/* 列表 */
+#editor ul, #editor ol { margin: 6px 0; padding-left: 24px; }
+#editor li { margin: 3px 0; }
+#editor li > ul, #editor li > ol { margin: 2px 0; }
+/* 引用 */
+#editor blockquote {
+  margin: 8px 0; padding: 5px 12px; border-left: 3px solid rgba(0, 0, 0, 0.22);
+  background: rgba(255, 255, 255, 0.45); color: #555;
+}
+/* 代码 */
+#editor code {
+  font-family: "DejaVu Sans Mono", "Consolas", "Menlo", monospace; font-size: 13px;
+  background: rgba(0, 0, 0, 0.07); padding: 1px 5px; border-radius: 4px;
+}
+#editor pre {
+  background-color: #1e1e1e; color: #f0f0f0; padding: 10px 12px; border-radius: 8px;
+  overflow-x: auto; overscroll-behavior-x: contain; margin: 8px 0; line-height: 1.5;
+}
+/* WebKitGTK 的横向滚动条是覆盖式的：不占位、不滚动就看不见，宽代码块
+   看起来像被截断了。editor.js 给真的横向溢出（scrollWidth>clientWidth）的
+   代码块加 .hscroll，这里在视口两侧画常驻暗角当"还能移动"的提示，并把
+   光标提示成可拖动。暗角只贴在盒边（background-attachment: scroll）：
+   跟内容走的 local 层在 WebKitGTK 里滚动时会刷成一片白。
+   别加 will-change: scroll-position —— 那会让 WebKit 把这块交给异步滚动，
+   真实鼠标拖动被当成平移手势吃掉，JS 就再也收不到 pointermove 了。 */
+#editor pre.hscroll {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0) 24px),
+    linear-gradient(to left, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0) 24px);
+  background-repeat: no-repeat;
+  background-position: left center, right center;
+  background-size: 34% 100%, 34% 100%;
+  cursor: grab;
+}
+#editor pre.dragging { cursor: grabbing; user-select: none; }
+/* 底色也铺到 code 上：代码有多宽就铺多宽，滚动时新露出的那一条不会是透明
+   的，透明 webview 下就不会闪出便签底色（看着像"滚动时变白"）。 */
+#editor pre code { background: #1e1e1e; color: inherit; padding: 0 2px; font-size: 13px; }
+/* highlight.js 深色主题（近似 VS Code Dark+），配合 pre 的 #1e1e1e 底色 */
+#editor pre code.hljs { display: block; }
+#editor .hljs-comment, #editor .hljs-quote { color: #6a9955; font-style: italic; }
+#editor .hljs-keyword, #editor .hljs-selector-tag, #editor .hljs-literal,
+#editor .hljs-built_in, #editor .hljs-type { color: #569cd6; }
+#editor .hljs-string, #editor .hljs-doctag, #editor .hljs-regexp { color: #ce9178; }
+#editor .hljs-number, #editor .hljs-symbol, #editor .hljs-bullet { color: #b5cea8; }
+#editor .hljs-title, #editor .hljs-section, #editor .hljs-name,
+#editor .hljs-selector-id, #editor .hljs-selector-class { color: #dcdcaa; }
+#editor .hljs-attr, #editor .hljs-attribute, #editor .hljs-variable,
+#editor .hljs-template-variable { color: #9cdcfe; }
+#editor .hljs-meta, #editor .hljs-meta-keyword { color: #c586c0; }
+#editor .hljs-tag { color: #808080; }
+#editor .hljs-deletion { background: rgba(255, 0, 0, 0.18); }
+#editor .hljs-addition { background: rgba(0, 200, 80, 0.18); }
+#editor .hljs-emphasis { font-style: italic; }
+#editor .hljs-strong { font-weight: 700; }
+/* 其它 */
+#editor hr { border: none; border-top: 1px solid rgba(0, 0, 0, 0.15); margin: 12px 0; }
+#editor a { color: #1a73a8; }
+#editor table { border-collapse: collapse; margin: 8px 0; }
+#editor td, #editor th { border: 1px solid rgba(0, 0, 0, 0.2); padding: 4px 9px; }
+#editor sub, #editor sup { font-size: 0.75em; line-height: 0; }
+/* 选中文本 */
+/* 选中文本：必须同时覆盖 #editor 自身的文本（不带空格的选择器）和后代元素，
+   否则 WebKitGTK 落回系统默认的蓝底黑字，深底时完全看不清。 */
+::selection, #editor::selection, #editor *::selection { background: #ffd54f; color: #333; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.28); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.45); }
+::-webkit-scrollbar-corner { background: transparent; }

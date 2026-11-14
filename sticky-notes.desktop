@@ -3,7 +3,10 @@ Name=StickyNotes
 Name[zh_CN]=便签
 Comment=桌面便签客户端
 Comment[zh_CN]=桌面便签客户端
-Exec=/usr/local/bin/StickyNotes
+# 强制 CPU 软件渲染：宿主机进程能访问 GPU 时，WebKitGTK 2.50.4 的硬件合成
+# 只画首帧、后续不重绘（表现为滚动失效、拖不动、拖动刷白）。容器命令行
+# 启动访问不到 /dev/dri 反而自动走 llvmpipe，所以这里对齐那条正常路径。
+Exec=env LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11 WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/local/bin/StickyNotes
 Icon=sticky-notes
 Type=Application
 Terminal=false

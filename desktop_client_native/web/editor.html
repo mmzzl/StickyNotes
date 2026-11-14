@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<div id="editor" contenteditable="true" spellcheck="false"></div>
+
+<!-- 首屏引导：库还没加载完时 Go 就能先把文本/底色推进来。
+     editor.js 就绪后会自动升级为排版视图。 -->
+<script>
+(function () {
+  window.__pendingMD = null;
+  window.__setColor = function (c) {
+    document.documentElement.style.background = c;
+    document.body.style.background = c;
+  };
+  var m = /[?&]c=([^&]+)/.exec(location.search);
+  if (m) window.__setColor(decodeURIComponent(m[1]));
+  window.__setMarkdown = function (md) {
+    window.__pendingMD = md || '';
+    document.getElementById('editor').textContent = window.__pendingMD;
+    if (window.__editorReady) window.__editorReady(window.__pendingMD);
+  };
+})();
+</script>
+<script defer src="marked.min.js"></script>
+<script defer src="turndown.min.js"></script>
+<script defer src="turndown-plugin-gfm.min.js"></script>
+<script defer src="editor.js"></script>
+</body>
+</html>

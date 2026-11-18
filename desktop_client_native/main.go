@@ -32,12 +32,14 @@ type deskApp struct {
 	status  string
 	loading bool
 	windows map[string]*noteApp
+	regWin  *registerWin // 独立注册窗口
 
 	// Login view state, used while the client has no tokens.
 	loginBase      string
 	loginUser      string
 	loginPass      string
 	loginCode      string
+	showPass       bool // 密码框明文/密文切换
 	captchaID      string
 	captchaImg     ui.ImageSource
 	captchaLoading bool

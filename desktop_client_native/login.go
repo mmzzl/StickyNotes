@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -26,9 +24,23 @@ func (a *deskApp) loginView(c *ui.Context) {
 		ui.TextInput(c, &a.loginBase).Placeholder("http://192.168.1.10:8000")
 
 		ui.Text(c, "用户名").FontSize(12).TextColor(t.TextMuted)
-		user := ui.TextInput(c, &a.loginUser).Placeholder("用户名")
+		ui.TextInput(c, &a.loginUser).Placeholder("用户名")
 		ui.Text(c, "密码").FontSize(12).TextColor(t.TextMuted)
-		pass := ui.TextInput(c, &a.loginPass).Placeholder("密码").Password()
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).Children(func() {
+				pass := ui.TextInput(c, &a.loginPass).Placeholder("密码")
+				if !a.showPass {
+					pass.Password() // Password() 按帧生效：仅在隐藏时调用
+				}
+			})
+			toggleLabel := "显示"
+			if a.showPass {
+				toggleLabel = "隐藏"
+			}
+			if ui.Button(c, toggleLabel).Clicked() {
+				a.showPass = !a.showPass
+			}
+		})
 
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			ui.Column(c).Grow(1).Gap(2).Children(func() {
@@ -66,15 +78,12 @@ func (a *deskApp) loginView(c *ui.Context) {
 			if a.loggingIn {
 				ui.Text(c, "登录中…").FontSize(12).TextColor(t.TextMuted)
 			}
-		})
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			if ui.Button(c, "注册新账号").Disabled(a.loggingIn).Clicked() {
-				a.submitRegister()
+			ui.Column(c).Grow(1) // 占位，把注册按钮推到最右
+			if ui.Button(c, "注册新账号").Clicked() {
+				a.openRegisterWindow()
 			}
-			ui.Text(c, "注册需要服务器开放注册").FontSize(11).TextColor(t.TextMuted)
 		})
-		_ = user
-		_ = pass
+		ui.Text(c, "注册需要服务器开放注册").FontSize(11).TextColor(t.TextMuted)
 	})
 }
 
@@ -140,47 +149,6 @@ func (a *deskApp) submitLogin() {
 			a.loginPass = ""
 			a.loginCode = ""
 			a.status = "登录成功"
-			a.reload()
-		})
-	}()
-}
-
-func (a *deskApp) submitRegister() {
-	if a.loggingIn {
-		return
-	}
-	if a.loginBase == "" || a.loginUser == "" || a.loginPass == "" {
-		a.status = "请填写服务器地址、用户名和密码"
-		return
-	}
-	res, err := mygo.Dialog.Message(mygo.MessageOptions{
-		Parent:        a.win,
-		Type:          mygo.MessageQuestion,
-		Message:       "注册新账号？",
-		Detail:        fmt.Sprintf("在 %s 上注册用户「%s」。\n\n注册成功即自动登录。", a.loginBase, a.loginUser),
-		Buttons:       []string{"取消", "注册"},
-		DefaultButton: 0,
-		CancelButton:  0,
-	})
-	if err != nil || res.Button != 1 {
-		return
-	}
-	a.loggingIn = true
-	a.status = "注册中…"
-	base, user, pass := a.loginBase, a.loginUser, a.loginPass
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := a.client.Register(ctx, base, user, pass)
-		cancel()
-		a.win.Update(func() {
-			a.loggingIn = false
-			if err != nil {
-				a.status = "注册失败：" + err.Error()
-				return
-			}
-			a.loginPass = ""
-			a.loginCode = ""
-			a.status = "注册成功，已登录"
 			a.reload()
 		})
 	}()
